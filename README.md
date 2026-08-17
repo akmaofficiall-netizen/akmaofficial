@@ -1,0 +1,38 @@
+# سیستم مدیریت یکپارچه حکمت آکما
+
+## راه‌اندازی روی Render.com (رایگان)
+
+### مرحله ۱: دیتابیس رایگان بساز
+
+۱. به **neon.tech** برو → Sign Up → Create Project (اسم: akmamath)
+۲. بعد از ساخت، روی **Connection string** کلیک کن
+۳. حالت **Pooled connection** رو انتخاب کن → کپی کن
+
+### مرحله ۲: کد رو آپلود کن
+
+۱. به **github.com** برو → New Repository → اسم: akmamath
+۲. فایل‌های داخل این ZIP رو آپلود کن (Drag & Drop)
+۳. Commit changes رو بزن
+
+### مرحله ۳: روی Render.com Deploy کن
+
+۱. به **render.com** برو → Sign Up → New Web Service
+۲. Connect to GitHub → Repo: akmamath رو انتخاب کن
+۳. تنظیمات:
+   - **Environment:** Node
+   - **Build Command:** `npm install && npm run build`
+   - **Start Command:** `npm run start`
+4. در بخش **Environment Variables** اضافه کن:
+   - Key: `DATABASE_URL` → Value: اون connection string که از Neon کپی کردی
+5. Create Web Service رو بزن
+
+### بعد از Deploy
+
+سایت بالا میاد و **به صورت خودکار** جداول دیتابیس رو می‌سازه و داده‌های نمونه اضافه می‌کنه.
+
+## متغیرهای محیطی
+
+| متغیر | توضیح | اجباری |
+|-------|-------|--------|
+| `DATABASE_URL` | آدرس Neon PostgreSQL | بله |
+| `OPENAI_API_KEY` | کلید AI (اختیاری) | خیر |
