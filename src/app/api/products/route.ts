@@ -4,12 +4,13 @@ import { products, productRecipes, rawMaterials, projectProductPrices } from "@/
 import { desc, eq, and } from "drizzle-orm";
 import { updateProductCostFromBOM } from "@/services/pricing";
 import { logAuditEvent } from "@/services/audit";
+import { requirePermission } from "@/services/access";
 
 export async function GET() {
-  try {
+  try { await requirePermission("products.view");
     const list = await db.select().from(products).orderBy(desc(products.createdAt));
 
-    const formatted = list.map((p: any) => ({
+    const formatted = list.map((p) => ({
       ...p,
       basePrice: Number(p.basePrice),
       calculatedCost: Number(p.calculatedCost),
@@ -27,6 +28,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    await requirePermission(body?.action === "update_project_price" ? "projects.price.manage" : "products.create");
 
     // PROMPT FIX B: Handle project-specific price update strictly matching (projectId + productId)
     if (body.action === "update_project_price") {

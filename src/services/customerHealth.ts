@@ -49,27 +49,7 @@ export async function recalculateCustomerHealth(customerId: string): Promise<{
     }
   }
 
-  // Handle new customer with no invoices yet
-  if (customerInvoices.length === 0) {
-    const defaultScore = 70;
-    const defaultStatus: "green" | "yellow" | "red" = "yellow";
-    const breakdown: HealthBreakdown = {
-      recencyScore: 15,
-      frequencyScore: 15,
-      monetaryScore: 15,
-      paymentScore: 20,
-      profitabilityScore: 5,
-    };
-    await db
-      .update(customers)
-      .set({
-        healthScore: defaultScore,
-        healthStatus: defaultStatus,
-        updatedAt: new Date(),
-      })
-      .where(eq(customers.id, customerId));
-    return { score: defaultScore, status: defaultStatus, breakdown };
-  }
+  // 1. Recency Score (max 25)
   let recencyScore = 0;
   if (daysSinceLastPurchase <= 7) recencyScore = 25;
   else if (daysSinceLastPurchase <= 14) recencyScore = 20;

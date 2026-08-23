@@ -1,8 +1,6 @@
 {
-  "name": "AKMA Math ERP",
-  "description": "Enterprise management, production, inventory, accounting and analytics system for AKMA Math.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "name": "Hekmat Akma Management System",
+  "description": "سیستم یکپارچه مدیریت عملیات، حسابداری، انبار و CRM حکمت آکما",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

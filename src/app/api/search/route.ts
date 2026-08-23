@@ -54,13 +54,13 @@ export async function GET(req: Request) {
       ]);
 
     const results = [
-      ...matchedCustomers.map((item: any) => ({ ...item, type: "customer", typeLabel: "مشتری" })),
-      ...matchedInvoices.map((item: any) => ({ ...item, type: "invoice", typeLabel: "فاکتور" })),
-      ...matchedProducts.map((item: any) => ({ ...item, type: "product", typeLabel: "محصول" })),
-      ...matchedRawMaterials.map((item: any) => ({ ...item, type: "raw_material", typeLabel: "ماده اولیه" })),
-      ...matchedSuppliers.map((item: any) => ({ ...item, type: "supplier", typeLabel: "تامین‌کننده" })),
-      ...matchedProjects.map((item: any) => ({ ...item, type: "project", typeLabel: "پروژه" })),
-      ...matchedEmployees.map((item: any) => ({ ...item, type: "employee", typeLabel: "همکار/ویزیتور" })),
+      ...matchedCustomers.map((item) => ({ ...item, type: "customer", typeLabel: "مشتری" })),
+      ...matchedInvoices.map((item) => ({ ...item, type: "invoice", typeLabel: "فاکتور" })),
+      ...matchedProducts.map((item) => ({ ...item, type: "product", typeLabel: "محصول" })),
+      ...matchedRawMaterials.map((item) => ({ ...item, type: "raw_material", typeLabel: "ماده اولیه" })),
+      ...matchedSuppliers.map((item) => ({ ...item, type: "supplier", typeLabel: "تامین‌کننده" })),
+      ...matchedProjects.map((item) => ({ ...item, type: "project", typeLabel: "پروژه" })),
+      ...matchedEmployees.map((item) => ({ ...item, type: "employee", typeLabel: "همکار/ویزیتور" })),
     ];
 
     return NextResponse.json({ success: true, results });

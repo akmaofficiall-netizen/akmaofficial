@@ -12,6 +12,7 @@ import {
   Package,
   Layers
 } from "lucide-react";
+import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
 
 export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [batches, setBatches] = useState<any[]>([]);
@@ -151,7 +152,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                   <td className="p-4 text-slate-300">{Number(b.totalMaterialCost).toLocaleString("fa-IR")}</td>
                   <td className="p-4 font-bold text-emerald-400">{b.totalBatchCost.toLocaleString("fa-IR")}</td>
                   <td className="p-4 font-semibold text-sky-300">{b.unitCost.toLocaleString("fa-IR")}</td>
-                  <td className="p-4 text-slate-400">{new Date(b.productionDate).toLocaleDateString("fa-IR")}</td>
+                  <td className="p-4 text-slate-400">{toJalaliDate(b.productionDate || b.createdAt, { showTime: true })}</td>
                   <td className="p-4">
                     <NeonBadge variant="green">تکمیل شده</NeonBadge>
                   </td>

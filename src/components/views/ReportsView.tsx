@@ -1,8 +1,20 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
-import { TrendingUp, BarChart2, DollarSign, Sliders, Layers, RefreshCw, ArrowUpRight } from "lucide-react";
+import {
+  TrendingUp,
+  BarChart2,
+  DollarSign,
+  Sliders,
+  Layers,
+  RefreshCw,
+  ArrowUpRight,
+  ShoppingBag,
+  Users,
+  Calendar,
+  Package
+} from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -12,6 +24,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts";
+import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
 
 export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [activeTab, setActiveTab] = useState<"financial" | "sales" | "inflation" | "comparison">("financial");
@@ -30,7 +43,7 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
   const [projA, setProjA] = useState("");
   const [projB, setProjB] = useState("");
 
-  const fetchData = useCallback(async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
       const projParam = selectedProjectId ? `&projectId=${selectedProjectId}` : "";
@@ -46,8 +59,8 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
       if (projRes.success) {
         setProjects(projRes.projects || []);
         if (projRes.projects.length >= 2) {
-          setProjA((prev) => prev || projRes.projects[0].id);
-          setProjB((prev) => prev || projRes.projects[1].id);
+          setProjA(projRes.projects[0].id);
+          setProjB(projRes.projects[1].id);
         }
       }
       if (rmRes.success) setRawMaterials(rmRes.rawMaterials || []);
@@ -56,11 +69,11 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
     } finally {
       setLoading(false);
     }
-  }, [selectedProjectId]);
+  };
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [selectedProjectId]);
 
   const handleRunInflationSim = async () => {
     try {
@@ -110,42 +123,42 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <BarChart2 className="h-6 w-6 text-purple-400" />
-            مرکز گزارشات مدیریتی، سود و زیان (P&L) و تحلیل تورم
+            مرکز گزارشات مدیریتی، سود و زیان (P&L) و تحلیل داده‌ها
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            منبع اطلاعات مستقیماً داده‌های عملیاتی در یکپارچگی کامل با انبار، فروش و هزینه‌ها
+            داده‌های عملیاتی یکپارچه از فروش ویزیتوری، انبارداری و هزینه‌های جاری
           </p>
         </div>
 
-        <div className="flex items-center gap-2 rounded-xl bg-slate-900 p-1 border border-slate-800 text-xs font-semibold">
+        <div className="flex items-center gap-1.5 rounded-2xl bg-slate-900 p-1.5 border border-slate-800 text-xs font-semibold">
           <button
             onClick={() => setActiveTab("financial")}
-            className={`rounded-lg px-3 py-1.5 transition-all ${
-              activeTab === "financial" ? "bg-purple-600 text-white shadow" : "text-slate-400 hover:text-white"
+            className={`rounded-xl px-4 py-2 transition ${
+              activeTab === "financial" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
             سود و زیان (P&L)
           </button>
           <button
             onClick={() => setActiveTab("sales")}
-            className={`rounded-lg px-3 py-1.5 transition-all ${
-              activeTab === "sales" ? "bg-purple-600 text-white shadow" : "text-slate-400 hover:text-white"
+            className={`rounded-xl px-4 py-2 transition ${
+              activeTab === "sales" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
-            فروش و فاکتورها
+            فروش و همکاران
           </button>
           <button
             onClick={() => setActiveTab("inflation")}
-            className={`rounded-lg px-3 py-1.5 transition-all ${
-              activeTab === "inflation" ? "bg-purple-600 text-white shadow" : "text-slate-400 hover:text-white"
+            className={`rounded-xl px-4 py-2 transition ${
+              activeTab === "inflation" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
-            شبیه‌ساز تورم داخلی
+            شبیه‌ساز تورم
           </button>
           <button
             onClick={() => setActiveTab("comparison")}
-            className={`rounded-lg px-3 py-1.5 transition-all ${
-              activeTab === "comparison" ? "bg-purple-600 text-white shadow" : "text-slate-400 hover:text-white"
+            className={`rounded-xl px-4 py-2 transition ${
+              activeTab === "comparison" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
             مقایسه پروژه‌ها
@@ -157,32 +170,32 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
       {activeTab === "financial" && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl">
-              <span className="text-xs text-slate-400">درآمد خالص فروش:</span>
-              <h3 className="text-2xl font-bold text-blue-400 mt-1">
-                {(kpis.netRevenue || 0).toLocaleString("fa-IR")} <span className="text-xs font-normal text-slate-400">تومان</span>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl space-y-1">
+              <span className="text-xs text-slate-400">درآمد ناخالص فروش:</span>
+              <h3 className="text-2xl font-bold text-blue-400 font-mono">
+                {formatMoney(kpis.netRevenue || 0)}
               </h3>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl">
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl space-y-1">
               <span className="text-xs text-slate-400">سود ناخالص (Gross Profit):</span>
-              <h3 className={`text-2xl font-bold mt-1 ${kpis.grossProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                {(kpis.grossProfit || 0).toLocaleString("fa-IR")} <span className="text-xs font-normal text-slate-400">تومان</span>
+              <h3 className={`text-2xl font-bold font-mono ${kpis.grossProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                {formatMoney(kpis.grossProfit || 0)}
               </h3>
-              <p className="text-xs text-slate-400 mt-1">حاشیه سود ناخالص: {kpis.grossMarginPercent}%</p>
+              <p className="text-xs text-slate-400">حاشیه سود ناخالص: {kpis.grossMarginPercent || 0}%</p>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl">
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl space-y-1">
               <span className="text-xs text-slate-400">سود خالص عملیاتی (Net Profit):</span>
-              <h3 className={`text-2xl font-bold mt-1 ${kpis.netProfit >= 0 ? "text-purple-300" : "text-rose-400"}`}>
-                {(kpis.netProfit || 0).toLocaleString("fa-IR")} <span className="text-xs font-normal text-slate-400">تومان</span>
+              <h3 className={`text-2xl font-bold font-mono ${kpis.netProfit >= 0 ? "text-purple-300" : "text-rose-400"}`}>
+                {formatMoney(kpis.netProfit || 0)}
               </h3>
-              <p className="text-xs text-slate-400 mt-1">حاشیه سود خالص: {kpis.netMarginPercent}%</p>
+              <p className="text-xs text-slate-400">حاشیه سود خالص: {kpis.netMarginPercent || 0}%</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
-            <h3 className="text-base font-bold text-white mb-4">نمودار پل سود و زیان (Waterfall P&L Bridge)</h3>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
+            <h3 className="text-base font-bold text-white mb-4">نمودار ساختار سود و زیان (Waterfall Bridge)</h3>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={waterfallData} margin={{ top: 20, right: 10, left: -10, bottom: 20 }}>
@@ -192,9 +205,73 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
                   <Tooltip
                     contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", borderRadius: "12px" }}
                   />
-                  <Bar dataKey="value" name="مبلغ (تومان)" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="value" name="مبلغ (تومان)" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Sales & Employees */}
+      {activeTab === "sales" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 space-y-1">
+              <span className="text-xs text-slate-400">کل فاکتورهای فروش ثبت‌شده:</span>
+              <h3 className="text-2xl font-bold text-cyan-400 font-mono">
+                {salesData?.invoiceCount || 0} عدد
+              </h3>
+            </div>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 space-y-1">
+              <span className="text-xs text-slate-400">مجموع فروش ویزیتوری:</span>
+              <h3 className="text-2xl font-bold text-emerald-400 font-mono">
+                {formatMoney(salesData?.visitorSalesTotal || 0)}
+              </h3>
+            </div>
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 space-y-1">
+              <span className="text-xs text-slate-400">پورسانت‌های تعلق‌گرفته:</span>
+              <h3 className="text-2xl font-bold text-purple-300 font-mono">
+                {formatMoney(salesData?.commissionTotal || 0)}
+              </h3>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 space-y-4 shadow-xl">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Users className="h-5 w-5 text-cyan-400" />
+              عملکرد فروش و پورسانت همکاران و ویزیتورها
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="p-3.5">نام همکار</th>
+                    <th className="p-3.5">سمت</th>
+                    <th className="p-3.5">تعداد فاکتورها</th>
+                    <th className="p-3.5">مجموع فروش (تومان)</th>
+                    <th className="p-3.5">پورسانت کل</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {(salesData?.employeePerformances || []).map((emp: any) => (
+                    <tr key={emp.employeeId} className="hover:bg-slate-800/40">
+                      <td className="p-3.5 font-bold text-white">{emp.employeeName}</td>
+                      <td className="p-3.5 text-slate-400">{emp.role || "ویزیتور"}</td>
+                      <td className="p-3.5 font-mono">{emp.invoiceCount || 0}</td>
+                      <td className="p-3.5 font-bold text-emerald-400 font-mono">{formatMoney(emp.totalSales)}</td>
+                      <td className="p-3.5 font-bold text-purple-300 font-mono">{formatMoney(emp.totalCommission)}</td>
+                    </tr>
+                  ))}
+                  {!(salesData?.employeePerformances || []).length && (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-slate-500">
+                        داده‌ای از فروش همکاران ثبت نشده است.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -203,7 +280,7 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
       {/* Tab 3: Inflation Simulator */}
       {activeTab === "inflation" && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Sliders className="h-5 w-5 text-amber-400" />
               سناریوسازی تغییر قیمت مواد اولیه و تورم داخلی (What-If Analysis)
@@ -214,13 +291,13 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-2">
               {rawMaterials.map((rm) => (
-                <div key={rm.id} className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs space-y-2">
+                <div key={rm.id} className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 text-xs space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-bold text-white">{rm.name}</span>
-                    <span className="text-slate-400">{rm.currentCost.toLocaleString("fa-IR")} تومان</span>
+                    <span className="text-slate-400">{formatMoney(rm.currentCost)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-400">درصد تغییر:</span>
+                    <span className="text-slate-400">درصد افزایش:</span>
                     <input
                       type="number"
                       placeholder="0%"
@@ -228,7 +305,7 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
                       onChange={(e) =>
                         setSimulatedChanges({ ...simulatedChanges, [rm.id]: Number(e.target.value) })
                       }
-                      className="w-20 rounded-lg border border-slate-800 bg-slate-900 p-1 text-center font-bold text-amber-400"
+                      className="w-20 rounded-xl border border-slate-800 bg-slate-900 p-1.5 text-center font-bold text-amber-400"
                     />
                     <span className="text-slate-400">%</span>
                   </div>
@@ -238,7 +315,7 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
 
             <button
               onClick={handleRunInflationSim}
-              className="rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-500"
+              className="rounded-xl bg-amber-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-500 transition"
             >
               محاسبه اثر تورم بر بهای تمام شده و پیشنهاد قیمت
             </button>
@@ -246,29 +323,29 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
 
           {/* Results */}
           {simResults.length > 0 && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 shadow-xl overflow-hidden p-5 space-y-3">
+            <div className="rounded-3xl border border-slate-800 bg-slate-900/60 shadow-xl overflow-hidden p-6 space-y-4">
               <h4 className="text-sm font-bold text-white">نتایج شبیه‌سازی قیمت محصولات</h4>
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-xs text-slate-300">
                   <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
                     <tr>
-                      <th className="p-3">محصول</th>
-                      <th className="p-3">قیمت فعلی</th>
-                      <th className="p-3">COGS فعلی</th>
-                      <th className="p-3">COGS شبیه‌سازی شده</th>
-                      <th className="p-3">کاهش حاشیه سود</th>
-                      <th className="p-3">قیمت فروش پیشنهادی</th>
+                      <th className="p-3.5">نام محصول</th>
+                      <th className="p-3.5">قیمت فروش فعلی</th>
+                      <th className="p-3.5">بهای تمام‌شده فعلی</th>
+                      <th className="p-3.5">بهای تمام‌شده جدید</th>
+                      <th className="p-3.5">افت حاشیه سود</th>
+                      <th className="p-3.5">قیمت فروش پیشنهادی جدید</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {simResults.map((r) => (
                       <tr key={r.productId} className="hover:bg-slate-800/40">
-                        <td className="p-3 font-bold text-white">{r.productName}</td>
-                        <td className="p-3 text-slate-300">{r.currentPrice.toLocaleString("fa-IR")} تومان</td>
-                        <td className="p-3 text-slate-400">{r.oldCogs.toLocaleString("fa-IR")} تومان</td>
-                        <td className="p-3 font-bold text-amber-400">{r.newCogs.toLocaleString("fa-IR")} تومان</td>
-                        <td className="p-3 font-bold text-rose-400">-{r.marginCompressionPct}%</td>
-                        <td className="p-3 font-bold text-emerald-400">{r.recommendedPrice.toLocaleString("fa-IR")} تومان</td>
+                        <td className="p-3.5 font-bold text-white">{r.productName}</td>
+                        <td className="p-3.5 text-slate-300 font-mono">{formatMoney(r.currentPrice)}</td>
+                        <td className="p-3.5 text-slate-400 font-mono">{formatMoney(r.oldCogs)}</td>
+                        <td className="p-3.5 font-bold text-amber-400 font-mono">{formatMoney(r.newCogs)}</td>
+                        <td className="p-3.5 font-bold text-rose-400 font-mono">-{r.marginCompressionPct}%</td>
+                        <td className="p-3.5 font-bold text-emerald-400 font-mono">{formatMoney(r.recommendedPrice)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -282,19 +359,19 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
       {/* Tab 4: Project Comparison */}
       {activeTab === "comparison" && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Layers className="h-5 w-5 text-purple-400" />
               مقایسه شاخص‌های کلیدی پروژه A با پروژه B
             </h3>
 
-            <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">انتخاب پروژه اول (A)</label>
+                <label className="block text-slate-300 font-semibold mb-1">انتخاب پروژه اول (A):</label>
                 <select
                   value={projA}
                   onChange={(e) => setProjA(e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-white"
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -305,11 +382,11 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">انتخاب پروژه دوم (B)</label>
+                <label className="block text-slate-300 font-semibold mb-1">انتخاب پروژه دوم (B):</label>
                 <select
                   value={projB}
                   onChange={(e) => setProjB(e.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-white"
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -322,28 +399,40 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
 
             <button
               onClick={handleRunComparison}
-              className="rounded-xl bg-purple-600 px-5 py-2 text-xs font-semibold text-white shadow-lg shadow-purple-600/30 hover:bg-purple-500"
+              className="rounded-xl bg-purple-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-600/30 hover:bg-purple-500 transition"
             >
               اجرای جدول مقایسه پروژه‌ها
             </button>
           </div>
 
           {comparisonData && (
-            <div className="grid grid-cols-2 gap-6 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
               {/* Proj A */}
-              <div className="rounded-2xl border border-blue-500/30 bg-slate-900/60 p-5 shadow-xl space-y-3">
-                <NeonBadge variant="blue">{comparisonData.projectA.info?.name}</NeonBadge>
-                <p className="text-slate-300">فروش کل: {comparisonData.projectA.kpis.totalSales.toLocaleString("fa-IR")} تومان</p>
-                <p className="text-emerald-400 font-bold">سود ناخالص: {comparisonData.projectA.kpis.totalGrossProfit.toLocaleString("fa-IR")} تومان</p>
-                <p className="text-slate-400">تعداد فاکتورها: {comparisonData.projectA.kpis.invoiceCount}</p>
+              <div className="rounded-3xl border border-blue-500/30 bg-slate-900/60 p-6 shadow-xl space-y-3">
+                <NeonBadge variant="blue">{comparisonData.projectA?.info?.name || "پروژه A"}</NeonBadge>
+                <p className="text-slate-300">
+                  فروش کل: <b className="text-white font-mono">{formatMoney(comparisonData.projectA?.kpis?.totalSales || 0)}</b>
+                </p>
+                <p className="text-emerald-400 font-bold">
+                  سود ناخالص: <span className="font-mono">{formatMoney(comparisonData.projectA?.kpis?.totalGrossProfit || 0)}</span>
+                </p>
+                <p className="text-slate-400">
+                  تعداد فاکتورها: <b className="text-slate-200 font-mono">{comparisonData.projectA?.kpis?.invoiceCount || 0}</b>
+                </p>
               </div>
 
               {/* Proj B */}
-              <div className="rounded-2xl border border-emerald-500/30 bg-slate-900/60 p-5 shadow-xl space-y-3">
-                <NeonBadge variant="green">{comparisonData.projectB.info?.name}</NeonBadge>
-                <p className="text-slate-300">فروش کل: {comparisonData.projectB.kpis.totalSales.toLocaleString("fa-IR")} تومان</p>
-                <p className="text-emerald-400 font-bold">سود ناخالص: {comparisonData.projectB.kpis.totalGrossProfit.toLocaleString("fa-IR")} تومان</p>
-                <p className="text-slate-400">تعداد فاکتورها: {comparisonData.projectB.kpis.invoiceCount}</p>
+              <div className="rounded-3xl border border-emerald-500/30 bg-slate-900/60 p-6 shadow-xl space-y-3">
+                <NeonBadge variant="green">{comparisonData.projectB?.info?.name || "پروژه B"}</NeonBadge>
+                <p className="text-slate-300">
+                  فروش کل: <b className="text-white font-mono">{formatMoney(comparisonData.projectB?.kpis?.totalSales || 0)}</b>
+                </p>
+                <p className="text-emerald-400 font-bold">
+                  سود ناخالص: <span className="font-mono">{formatMoney(comparisonData.projectB?.kpis?.totalGrossProfit || 0)}</span>
+                </p>
+                <p className="text-slate-400">
+                  تعداد فاکتورها: <b className="text-slate-200 font-mono">{comparisonData.projectB?.kpis?.invoiceCount || 0}</b>
+                </p>
               </div>
             </div>
           )}

@@ -3,11 +3,9 @@ import { db } from "@/db";
 import { rawMaterials } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { updateRawMaterial, getRawMaterialPriceHistory } from "@/services/rawMaterial";
-import { ensureRawMaterialsSchema } from "@/db/ensureSchema";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureRawMaterialsSchema();
     const { id } = await params;
     const [rm] = await db.select().from(rawMaterials).where(eq(rawMaterials.id, id)).limit(1);
     if (!rm) {
@@ -28,14 +26,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       priceHistory,
     });
   } catch (error: any) {
-    console.error("Raw materials API error", { message: error?.message, code: error?.code, detail: error?.detail });
-    return NextResponse.json({ success: false, error: error?.message || "خطای پایگاه داده" }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureRawMaterialsSchema();
     const { id } = await params;
     const body = await req.json();
 
@@ -56,7 +52,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json({ success: true, rawMaterial: updated });
   } catch (error: any) {
-    console.error("Raw materials API error", { message: error?.message, code: error?.code, detail: error?.detail });
-    return NextResponse.json({ success: false, error: error?.message || "خطای پایگاه داده" }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

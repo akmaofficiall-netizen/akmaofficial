@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { systemSettings } from "@/db/schema";
+import { migrateDatabase } from "@/db/migrate";
 import { seedDatabase } from "@/db/seed";
 
 export async function GET() {
   try {
-    // Attempt auto-seed if database is fresh
+    // Step 1: Create tables if they don't exist
+    await migrateDatabase();
+
+    // Step 2: Seed with sample data if fresh database
     await seedDatabase();
 
     const [settings] = await db.select().from(systemSettings).limit(1);

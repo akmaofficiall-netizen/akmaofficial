@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { requirePermission } from "@/services/access";
 import { queryAIAssistant } from "@/services/ai";
 
 export async function POST(req: Request) {
   try {
+    await requirePermission("ai.view");
     const body = await req.json();
 
     if (!body.question) {

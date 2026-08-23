@@ -1,102 +1,53 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import crypto from "node:crypto";
 import { db } from "@/db";
-import {
-  backups,
-  projects,
-  customers,
-  employees,
-  suppliers,
-  rawMaterials,
-  products,
-  invoices,
-  invoiceItems,
-  payments,
-  expenses,
-  productionBatches,
-  inventoryLedger,
-  alerts,
-  tasks,
-  auditLogs,
-  systemSettings
-} from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import * as schema from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
 import { logAuditEvent } from "./audit";
 
-/**
- * Creates a full JSON database backup snapshot
- */
+const BACKUP_TABLES = [
+  ["projects", schema.projects], ["customers", schema.customers], ["customerProjectMemberships", schema.customerProjectMemberships],
+  ["customerHealthLogs", schema.customerHealthLogs], ["employees", schema.employees], ["employeeProjectMemberships", schema.employeeProjectMemberships],
+  ["customerAssignments", schema.customerAssignments], ["roles", schema.roles], ["permissions", schema.permissions], ["rolePermissions", schema.rolePermissions],
+  ["employeeAccounts", schema.employeeAccounts], ["employeeProjectAssignments", schema.employeeProjectAssignments], ["projectCompensations", schema.projectCompensations], ["projectTargets", schema.projectTargets],
+  ["suppliers", schema.suppliers], ["rawMaterials", schema.rawMaterials], ["rawMaterialPriceHistory", schema.rawMaterialPriceHistory], ["products", schema.products],
+  ["productRecipes", schema.productRecipes], ["projectProductPrices", schema.projectProductPrices], ["warehouses", schema.warehouses], ["inventoryLedger", schema.inventoryLedger],
+  ["purchases", schema.purchases], ["purchaseItems", schema.purchaseItems], ["productionBatches", schema.productionBatches], ["productionBatchItems", schema.productionBatchItems],
+  ["invoices", schema.invoices], ["invoiceItems", schema.invoiceItems], ["accounts", schema.accounts], ["payments", schema.payments], ["paymentAllocations", schema.paymentAllocations],
+  ["commissionRules", schema.commissionRules], ["commissionLedger", schema.commissionLedger], ["payrollRecords", schema.payrollRecords], ["expenses", schema.expenses],
+  ["consignments", schema.consignments], ["consignmentItems", schema.consignmentItems], ["alerts", schema.alerts], ["tasks", schema.tasks], ["auditLogs", schema.auditLogs], ["systemSettings", schema.systemSettings],
+] as const;
+
 export async function createFullSystemBackup() {
-  const allProjects = await db.select().from(projects);
-  const allCustomers = await db.select().from(customers);
-  const allEmployees = await db.select().from(employees);
-  const allSuppliers = await db.select().from(suppliers);
-  const allRawMaterials = await db.select().from(rawMaterials);
-  const allProducts = await db.select().from(products);
-  const allInvoices = await db.select().from(invoices);
-  const allInvoiceItems = await db.select().from(invoiceItems);
-  const allPayments = await db.select().from(payments);
-  const allExpenses = await db.select().from(expenses);
-  const allProductionBatches = await db.select().from(productionBatches);
-  const allInventoryLedger = await db.select().from(inventoryLedger);
-  const allAlerts = await db.select().from(alerts);
-  const allTasks = await db.select().from(tasks);
-  const allSettings = await db.select().from(systemSettings);
-
-  const dump = {
-    version: "2.0.0",
-    timestamp: new Date().toISOString(),
-    data: {
-      projects: allProjects,
-      customers: allCustomers,
-      employees: allEmployees,
-      suppliers: allSuppliers,
-      rawMaterials: allRawMaterials,
-      products: allProducts,
-      invoices: allInvoices,
-      invoiceItems: allInvoiceItems,
-      payments: allPayments,
-      expenses: allExpenses,
-      productionBatches: allProductionBatches,
-      inventoryLedger: allInventoryLedger,
-      alerts: allAlerts,
-      tasks: allTasks,
-      settings: allSettings,
-    },
-  };
-
+  const data: Record<string, unknown> = {};
+  for (const [name, table] of BACKUP_TABLES) data[name] = await db.select().from(table as any);
+  const dump = { version: "3.0.0", timestamp: new Date().toISOString(), database: "akma", data };
   const jsonString = JSON.stringify(dump);
-  const sizeBytes = Buffer.byteLength(jsonString, "utf8");
-  const checksum = `SHA256-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  const filename = `backup_akma_v2_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-
-  const [backupRecord] = await db
-    .insert(backups)
-    .values({
-      filename,
-      sizeBytes,
-      checksum,
-      status: "completed",
-      backupData: dump as any,
-    })
-    .returning();
-
-  await logAuditEvent("BACKUP", "system", backupRecord.id, { filename, sizeBytes, checksum });
-
-  return backupRecord;
+  const buffer = Buffer.from(jsonString, "utf8");
+  const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
+  const filename = `backup_akma_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  const backupDir = process.env.BACKUP_DIR || path.resolve(process.cwd(), "backups");
+  let storagePath: string | null = null;
+  try {
+    await fs.mkdir(backupDir, { recursive: true });
+    storagePath = path.join(backupDir, filename);
+    await fs.writeFile(storagePath, buffer);
+  } catch (error) {
+    console.warn("Backup file storage unavailable; keeping snapshot in database:", error);
+  }
+  const [record] = await db.insert(schema.backups).values({
+    filename, sizeBytes: buffer.byteLength, checksum, status: "completed", backupData: dump as any,
+  }).returning();
+  await logAuditEvent("BACKUP", "system", record.id, { filename, sizeBytes: buffer.byteLength, checksum, storagePath });
+  return { ...record, storagePath };
 }
 
-/**
- * Gets list of all system backups
- */
 export async function getBackupsList() {
-  return await db
-    .select({
-      id: backups.id,
-      filename: backups.filename,
-      sizeBytes: backups.sizeBytes,
-      checksum: backups.checksum,
-      status: backups.status,
-      createdAt: backups.createdAt,
-    })
-    .from(backups)
-    .orderBy(desc(backups.createdAt));
+  return db.select({ id: schema.backups.id, filename: schema.backups.filename, sizeBytes: schema.backups.sizeBytes, checksum: schema.backups.checksum, status: schema.backups.status, createdAt: schema.backups.createdAt }).from(schema.backups).orderBy(desc(schema.backups.createdAt));
+}
+
+export async function getBackupById(id: string) {
+  const [record] = await db.select().from(schema.backups).where(eq(schema.backups.id, id)).limit(1);
+  return record;
 }

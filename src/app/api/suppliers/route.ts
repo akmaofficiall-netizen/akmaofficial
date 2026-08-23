@@ -3,9 +3,11 @@ import { db } from "@/db";
 import { suppliers } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { logAuditEvent } from "@/services/audit";
+import { requirePermission } from "@/services/access";
 
 export async function GET() {
   try {
+    await requirePermission("suppliers.view");
     const list = await db.select().from(suppliers).orderBy(desc(suppliers.createdAt));
     return NextResponse.json({ success: true, suppliers: list });
   } catch (error: any) {
@@ -15,6 +17,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    await requirePermission("suppliers.create");
     const body = await req.json();
     if (!body.name || !body.mobile) {
       return NextResponse.json({ success: false, error: "نام تامین کننده و شماره موبایل الزامی است." }, { status: 400 });

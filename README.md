@@ -1,20 +1,47 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# سیستم مدیریت یکپارچه حکمت آکما
 
-# Run and deploy your AI Studio app
+## راه‌اندازی روی Render.com (رایگان)
 
-This contains everything you need to run your app locally.
+### مرحله ۱: دیتابیس رایگان بساز
 
-View your app in AI Studio: https://ai.studio/apps/117694ba-0a9e-4d71-a8f9-5520fc56720b
+۱. به **neon.tech** برو → Sign Up → Create Project (اسم: akmamath)
+۲. بعد از ساخت، روی **Connection string** کلیک کن
+۳. حالت **Pooled connection** رو انتخاب کن → کپی کن
 
-## Run Locally
+### مرحله ۲: کد رو آپلود کن
 
-**Prerequisites:**  Node.js
+۱. به **github.com** برو → New Repository → اسم: akmamath
+۲. فایل‌های داخل این ZIP رو آپلود کن (Drag & Drop)
+۳. Commit changes رو بزن
+
+### مرحله ۳: روی Render.com Deploy کن
+
+۱. به **render.com** برو → Sign Up → New Web Service
+۲. Connect to GitHub → Repo: akmamath رو انتخاب کن
+۳. تنظیمات:
+   - **Environment:** Node
+   - **Build Command:** `npm install && npm run build`
+   - **Start Command:** `npm run start`
+4. در بخش **Environment Variables** اضافه کن:
+   - Key: `DATABASE_URL` → Value: اون connection string که از Neon کپی کردی
+5. Create Web Service رو بزن
+
+### بعد از Deploy
+
+سایت بالا میاد و **به صورت خودکار** جداول دیتابیس رو می‌سازه و داده‌های نمونه اضافه می‌کنه.
+
+## متغیرهای محیطی
+
+| متغیر | توضیح | اجباری |
+|-------|-------|--------|
+| `DATABASE_URL` | آدرس Neon PostgreSQL | بله |
+| `OPENAI_API_KEY` | کلید AI (اختیاری) | خیر |
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Admin login (first deploy)
+
+Set `INITIAL_ADMIN_USERNAME` and `INITIAL_ADMIN_PASSWORD` in `.env`. Defaults for a test environment are `akmaadmin` / `AkmaAdmin@2026`; change them before production.
+
+## Google Maps
+
+Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`. Enable Maps JavaScript API and Places API/Places Library in Google Cloud.

@@ -2,12 +2,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { rawMaterials, suppliers } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
-import { createRawMaterial, adjustRawMaterialStock } from "@/services/rawMaterial";
-import { ensureRawMaterialsSchema } from "@/db/ensureSchema";
+import { createRawMaterial, updateRawMaterial, adjustRawMaterialStock } from "@/services/rawMaterial";
 
 export async function GET() {
   try {
-    await ensureRawMaterialsSchema();
     const list = await db
       .select({
         rawMaterial: rawMaterials,
@@ -17,7 +15,7 @@ export async function GET() {
       .leftJoin(suppliers, eq(rawMaterials.supplierId, suppliers.id))
       .orderBy(desc(rawMaterials.createdAt));
 
-    const formatted = list.map(({ rawMaterial, supplierName }: any) => ({
+    const formatted = list.map(({ rawMaterial, supplierName }) => ({
       ...rawMaterial,
       supplierName: supplierName || "نامشخص",
       stockQuantity: Number(rawMaterial.stockQuantity),
@@ -29,14 +27,12 @@ export async function GET() {
 
     return NextResponse.json({ success: true, rawMaterials: formatted });
   } catch (error: any) {
-    console.error("Raw materials API error", { message: error?.message, code: error?.code, detail: error?.detail });
-    return NextResponse.json({ success: false, error: error?.message || "خطای پایگاه داده" }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    await ensureRawMaterialsSchema();
     const body = await req.json();
 
     if (body.action === "adjust_stock") {
@@ -70,7 +66,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, rawMaterial: created });
   } catch (error: any) {
-    console.error("Raw materials API error", { message: error?.message, code: error?.code, detail: error?.detail });
-    return NextResponse.json({ success: false, error: error?.message || "خطای پایگاه داده" }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

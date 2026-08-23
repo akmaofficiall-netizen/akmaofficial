@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { products, projectProductPrices, productRecipes, rawMaterials } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc, lte, or, isNull } from "drizzle-orm";
 
 export interface ResolvedPriceResult {
   productId: string;
@@ -46,12 +46,12 @@ export async function resolveProductPrice(
   const [projectPriceRecord] = await db
     .select()
     .from(projectProductPrices)
-    .where(
-      and(
-        eq(projectProductPrices.projectId, projectId),
-        eq(projectProductPrices.productId, productId)
-      )
-    )
+    .where(and(
+      eq(projectProductPrices.projectId, projectId),
+      eq(projectProductPrices.productId, productId),
+      or(isNull(projectProductPrices.effectiveStartDate), lte(projectProductPrices.effectiveStartDate, new Date()))
+    ))
+    .orderBy(desc(projectProductPrices.effectiveStartDate), desc(projectProductPrices.updatedAt))
     .limit(1);
 
   if (projectPriceRecord && projectPriceRecord.customPrice !== null) {
@@ -129,7 +129,7 @@ export async function simulateInflationImpact(changes: Record<string, number>) {
   const allProducts = await db.select().from(products);
   const allRawMaterials = await db.select().from(rawMaterials);
 
-  const rawMaterialMap = new Map<string, any>(allRawMaterials.map((rm: any) => [rm.id, rm]));
+  const rawMaterialMap = new Map(allRawMaterials.map((rm) => [rm.id, rm]));
 
   const results = [];
 
@@ -164,9 +164,8 @@ export async function simulateInflationImpact(changes: Record<string, number>) {
     const newMargin = currentBasePrice > 0 ? ((currentBasePrice - newCogs) / currentBasePrice) * 100 : 0;
     const marginCompressionPct = oldMargin - newMargin;
 
-    // Recommended price to maintain original margin percentage (guarded against division by zero or negative margin)
-    const validOldMargin = (oldMargin > 0 && oldMargin < 95) ? oldMargin : 25;
-    const recommendedPrice = Math.round(newCogs / (1 - validOldMargin / 100));
+    // Recommended price to maintain original margin percentage
+    const recommendedPrice = oldMargin < 100 ? Math.round((newCogs / (1 - oldMargin / 100)) * 100) / 100 : Math.round(newCogs * 1.3);
 
     results.push({
       productId: product.id,

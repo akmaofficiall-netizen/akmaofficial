@@ -101,14 +101,17 @@ export async function runAlertsEngineScan() {
 }
 
 /**
- * Gets active alerts with optional scope filtering
+ * Gets active (non-resolved) alerts with optional scope filtering
  */
 export async function getActiveAlerts(projectId?: string | null) {
-  let query = db.select().from(alerts).orderBy(desc(alerts.createdAt));
-  const result = await query;
+  const result = await db
+    .select()
+    .from(alerts)
+    .where(eq(alerts.status, "active"))
+    .orderBy(desc(alerts.createdAt));
 
   if (projectId) {
-    return result.filter((a: any) => !a.projectId || a.projectId === projectId);
+    return result.filter((a) => !a.projectId || a.projectId === projectId);
   }
 
   return result;

@@ -72,6 +72,10 @@ export const AiAssistantView: React.FC<{ selectedProjectId: string | null }> = (
       {/* Result Output */}
       {result && (
         <div className="rounded-2xl border border-purple-500/30 bg-slate-900/80 p-6 shadow-2xl space-y-6 text-xs">
+          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
+            <h3 className="font-bold text-cyan-300 text-sm">پاسخ مستقیم هوش مصنوعی</h3>
+            <p className="text-slate-200 leading-7 whitespace-pre-wrap">{result.answer}</p>
+          </div>
           {/* Operational Facts */}
           <div className="space-y-2">
             <h3 className="font-bold text-purple-300 text-sm flex items-center gap-2">

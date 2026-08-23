@@ -10,7 +10,8 @@ import {
   commissionLedger,
   accounts,
   inventoryLedger,
-  projects
+  projects,
+  commissionRules
 } from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { recordInventoryTransaction } from "./inventory";
@@ -181,23 +182,44 @@ export async function createInvoice(input: CreateInvoiceInput) {
     });
   }
 
-  // Process Commission if employee assigned
+  // Commission Engine: project + product + employee override -> employee default -> product default.
   if (input.employeeId) {
     const [emp] = await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1);
     if (emp) {
-      const commRate = Number(emp.commissionRatePercent) || 5;
-      const commAmount = Math.round((grandTotal * commRate) / 100);
-
-      await db.insert(commissionLedger).values({
-        employeeId: input.employeeId,
-        invoiceId: createdInvoice.id,
-        projectId: input.projectId || null,
-        ruleSnapshot: { ratePercent: commRate, type: "salesperson_commission" },
-        baseAmount: grandTotal.toString(),
-        commissionAmount: commAmount.toString(),
-        status: "pending",
-        notes: `پورسانت فروش فاکتور #${invoiceNum}`,
-      });
+      const productIds = processedItems.map((item) => item.productId);
+      const rules = await db.select().from(commissionRules).where(eq(commissionRules.isActive, true));
+      let totalCommission = 0;
+      const snapshots: Array<Record<string, unknown>> = [];
+      for (const item of processedItems) {
+        const eligible = rules.filter((rule: any) => {
+          if (rule.employeeId && rule.employeeId !== input.employeeId) return false;
+          if (rule.projectId && rule.projectId !== input.projectId) return false;
+          if (rule.productId && rule.productId !== item.productId) return false;
+          const now = input.invoiceDate || new Date();
+          if (rule.effectiveStartDate && now < rule.effectiveStartDate) return false;
+          if (rule.effectiveEndDate && now > rule.effectiveEndDate) return false;
+          return true;
+        }).sort((a: any,b: any) => {
+          const score = (r: any) => (r.employeeId ? 8 : 0) + (r.projectId ? 4 : 0) + (r.productId ? 2 : 0);
+          return score(b) - score(a);
+        });
+        const rule = eligible[0];
+        const rate = rule ? Number(rule.rateValue) : Number(emp.commissionRatePercent) || 5;
+        const base = item.lineTotal;
+        const amount = rule?.ruleType === "fixed" ? rate : Math.round(base * rate / 100);
+        totalCommission += amount;
+        snapshots.push({ productId: item.productId, ruleId: rule?.id || null, ruleType: rule?.ruleType || "employee_default", rateValue: rate, baseAmount: base, commissionAmount: amount });
+      }
+      if (totalCommission > 0) {
+        await db.insert(commissionLedger).values({
+          employeeId: input.employeeId, invoiceId: createdInvoice.id, projectId: input.projectId || null,
+          ruleSnapshot: { invoiceNumber: invoiceNum, items: snapshots },
+          baseAmount: grandTotal.toString(), commissionAmount: totalCommission.toString(),
+          status: "pending", commissionType: "employee", recipientEmployeeId: input.employeeId,
+          notes: `پورسانت فروش فاکتور #${invoiceNum}`,
+        });
+        await db.update(invoices).set({ commissionSnapshot: snapshots }).where(eq(invoices.id, createdInvoice.id));
+      }
     }
   }
 

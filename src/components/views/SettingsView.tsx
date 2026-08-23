@@ -12,7 +12,6 @@ export const SettingsView: React.FC = () => {
     healthGreenThreshold: 75,
     healthYellowThreshold: 50,
     openaiApiKey: "",
-    openaiModel: "gpt-4o",
     aiEnabled: true,
   });
 
@@ -31,7 +30,6 @@ export const SettingsView: React.FC = () => {
           healthGreenThreshold: res.settings.healthGreenThreshold || 75,
           healthYellowThreshold: res.settings.healthYellowThreshold || 50,
           openaiApiKey: res.settings.openaiApiKey || "",
-          openaiModel: res.settings.openaiModel || "gpt-4o",
           aiEnabled: res.settings.aiEnabled !== undefined ? res.settings.aiEnabled : true,
         });
       }
@@ -85,7 +83,7 @@ export const SettingsView: React.FC = () => {
             تنظیمات کسب‌وکار و هوش مصنوعی
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            مشخصات حقوقی سازمان، آستانه‌های سلامت مشتریان CRM و پیکربندی کلید OpenAI
+            مشخصات حقوقی سازمان، آستانه‌های سلامت مشتریان CRM و پیکربندی کلید Gemini
           </p>
         </div>
       </div>
@@ -119,33 +117,21 @@ export const SettingsView: React.FC = () => {
         <div className="space-y-4 border-t border-slate-800 pt-4">
           <h3 className="font-bold text-white text-sm border-b border-slate-800 pb-2 flex items-center gap-2">
             <Key className="h-4 w-4 text-purple-400" />
-            پیکربندی هوش مصنوعی (OpenAI / LLM)
+            پیکربندی هوش مصنوعی (Google Gemini)
           </h3>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-slate-400 mb-1">OpenAI API Key (ذخیره امن سمت سرور)</label>
-              <input
-                type="password"
-                placeholder="sk-..."
-                value={form.openaiApiKey}
-                onChange={(e) => setForm({ ...form, openaiApiKey: e.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-400 mb-1">مدل هوش مصنوعی انتخاب شده</label>
-              <select
-                value={form.openaiModel}
-                onChange={(e) => setForm({ ...form, openaiModel: e.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
-              >
-                <option value="gpt-4o">gpt-4o (پیشنهادی)</option>
-                <option value="gpt-4-turbo">gpt-4-turbo</option>
-                <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-slate-400 mb-1">Gemini API Key (ذخیره امن سمت سرور)</label>
+            <input
+              type="password"
+              placeholder="AIza..."
+              value={form.openaiApiKey}
+              onChange={(e) => setForm({ ...form, openaiApiKey: e.target.value })}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+            />
+            <p className="mt-2 text-[11px] leading-5 text-slate-500">
+              مدل به‌صورت خودکار از مدل‌های مجاز همین API Key شناسایی و انتخاب می‌شود؛ نیازی به انتخاب دستی مدل نیست.
+            </p>
           </div>
         </div>
 

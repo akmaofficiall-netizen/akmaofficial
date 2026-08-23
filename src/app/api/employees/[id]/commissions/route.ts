@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server"; import { db } from "@/db"; import { commissionLedger } from "@/db/schema"; import { desc, eq } from "drizzle-orm";
+import { requirePermission } from "@/services/access";
+export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){try{const{id}=await params;await requirePermission("commissions.view");const commissions=await db.select().from(commissionLedger).where(eq(commissionLedger.employeeId,id)).orderBy(desc(commissionLedger.createdAt));return NextResponse.json({success:true,commissions});}catch(e:any){return NextResponse.json({success:false,error:e.message},{status:500});}}

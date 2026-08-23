@@ -17,7 +17,7 @@ export async function GET() {
       .innerJoin(suppliers, eq(purchases.supplierId, suppliers.id))
       .orderBy(desc(purchases.createdAt));
 
-    const formatted = list.map(({ purchase, supplierName }: any) => ({
+    const formatted = list.map(({ purchase, supplierName }) => ({
       ...purchase,
       supplierName,
       grandTotal: Number(purchase.grandTotal),

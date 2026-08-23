@@ -4,9 +4,11 @@ import { payments, accounts, customers, invoices, projects } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { recalculateCustomerHealth } from "@/services/customerHealth";
 import { logAuditEvent } from "@/services/audit";
+import { requirePermission } from "@/services/access";
 
 export async function GET() {
   try {
+    await requirePermission("payments.view");
     const list = await db
       .select({
         payment: payments,
@@ -22,7 +24,7 @@ export async function GET() {
       .leftJoin(projects, eq(payments.projectId, projects.id))
       .orderBy(desc(payments.createdAt));
 
-    const formatted = list.map(({ payment, accountName, customerName, invoiceNumber, projectName }: any) => ({
+    const formatted = list.map(({ payment, accountName, customerName, invoiceNumber, projectName }) => ({
       ...payment,
       accountName,
       customerName: customerName || "-",
@@ -40,13 +42,33 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const context = await requirePermission("payments.create", body.projectId || null);
 
     if (!body.accountId || !body.amount || Number(body.amount) <= 0) {
       return NextResponse.json({ success: false, error: "حساب مالی و مبلغ دریافتی الزامی است." }, { status: 400 });
     }
 
     const payNum = `PAY-${Date.now().toString().slice(-6)}`;
-    const amt = Number(body.amount);
+    let amt = Number(body.amount);
+    if (body.invoiceId) {
+      const [invForPayment] = await db.select({ grandTotal: invoices.grandTotal, paidAmount: invoices.paidAmount, balanceDue: invoices.balanceDue, customerId: invoices.customerId }).from(invoices).where(eq(invoices.id, body.invoiceId)).limit(1);
+      if (!invForPayment) return NextResponse.json({ success:false, error:"فاکتور یافت نشد" }, { status:404 });
+      const balance = Math.max(0, Number(invForPayment.grandTotal) - Number(invForPayment.paidAmount || 0));
+      if (amt > balance) return NextResponse.json({ success:false, error:`مبلغ پرداخت بیشتر از مانده فاکتور است. مانده: ${balance.toLocaleString("fa-IR")} تومان` }, { status:400 });
+      if (amt <= 0) return NextResponse.json({ success:false, error:"مبلغ پرداخت نامعتبر است." }, {status:400});
+      if (!body.customerId) body.customerId = invForPayment.customerId;
+    }
+    if (context && body.invoiceId) {
+      const [ownedInvoice] = await db.select({ employeeId: invoices.employeeId, customerId: invoices.customerId, projectId: invoices.projectId }).from(invoices).where(eq(invoices.id, body.invoiceId)).limit(1);
+      if (!ownedInvoice) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
+      if (ownedInvoice.employeeId !== context.employeeId) return NextResponse.json({ success: false, error: "این فاکتور متعلق به شما نیست" }, { status: 403 });
+    }
+    if (context && body.invoiceId) {
+      const [ownedInvoice] = await db.select({ employeeId: invoices.employeeId, customerId: invoices.customerId, projectId: invoices.projectId }).from(invoices).where(eq(invoices.id, body.invoiceId)).limit(1);
+      if (!ownedInvoice) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
+      if (ownedInvoice.employeeId !== context.employeeId) return NextResponse.json({ success: false, error: "این فاکتور متعلق به شما نیست" }, { status: 403 });
+      if (ownedInvoice.projectId && body.projectId && ownedInvoice.projectId !== body.projectId) return NextResponse.json({ success: false, error: "پروژه فاکتور و پرداخت یکسان نیست" }, { status: 400 });
+    }
 
     const [created] = await db
       .insert(payments)

@@ -159,6 +159,19 @@ export const ProductsView: React.FC = () => {
     setFormData({ ...formData, recipes: updated });
   };
 
+  const openEditProduct = async (product: any) => {
+    const res = await fetch(`/api/products/${product.id}`).then(r=>r.json());
+    if (!res.success) return alert(res.error || "خطا در دریافت محصول");
+    setEditingProduct(res.product);
+    setFormData({ code: res.product.code, name: res.product.name, category: res.product.category, unit: res.product.unit, basePrice: Number(res.product.basePrice), minStockQuantity: Number(res.product.minStockQuantity), recipes: (res.recipes||[]).map((r:any)=>({rawMaterialId:r.rawMaterialId, quantityRequired:Number(r.quantityRequired), wastagePercent:Number(r.wastagePercent||0)})) });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault(); if (!editingProduct) return; setSaving(true);
+    try { const res = await fetch(`/api/products/${editingProduct.id}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(formData) }).then(r=>r.json()); if(res.success){setEditingProduct(null);fetchData();} else alert(res.error||"خطا در ویرایش محصول"); }
+    catch(err:any){ alert(err.message||"خطا"); } finally { setSaving(false); }
+  };
+
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -238,7 +251,8 @@ export const ProductsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center justify-between pt-2 gap-2">
+                <button onClick={() => openEditProduct(p)} className="flex items-center gap-1.5 rounded-xl bg-cyan-600/15 border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300"><Edit2 className="h-3.5 w-3.5"/>ویرایش و BOM</button>
                 <button
                   onClick={() => {
                     setManagingProjectPrice(p);
@@ -396,6 +410,20 @@ export const ProductsView: React.FC = () => {
                   {saving ? "در حال ثبت..." : "ذخیره محصول"}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4 my-8">
+            <div className="flex items-center justify-between"><h3 className="text-base font-bold text-white">ویرایش محصول و فرمول ساخت</h3><button onClick={()=>setEditingProduct(null)}><X className="h-5 w-5 text-slate-400"/></button></div>
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3"><input required value={formData.code} onChange={e=>setFormData({...formData,code:e.target.value})} placeholder="کد" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/><input required value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} placeholder="نام" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/></div>
+              <div className="grid grid-cols-3 gap-3"><input value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})} placeholder="دسته" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/><input value={formData.unit} onChange={e=>setFormData({...formData,unit:e.target.value})} placeholder="واحد" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/><input type="number" value={formData.basePrice} onChange={e=>setFormData({...formData,basePrice:Number(e.target.value)})} placeholder="قیمت" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/></div>
+              <div className="border-t border-slate-800 pt-3 space-y-2"><div className="flex justify-between"><b>فرمول ساخت (BOM)</b><button type="button" onClick={addRecipeRow} className="text-emerald-400">+ ماده اولیه</button></div>{formData.recipes.map((r,i)=><div key={i} className="flex gap-2"><select value={r.rawMaterialId} onChange={e=>{const x=[...formData.recipes];x[i].rawMaterialId=e.target.value;setFormData({...formData,recipes:x})}} className="flex-1 rounded-lg bg-slate-950 border border-slate-800 p-2 text-white">{rawMaterials.map(rm=><option key={rm.id} value={rm.id}>{rm.name} ({rm.unit})</option>)}</select><input type="number" value={r.quantityRequired} onChange={e=>{const x=[...formData.recipes];x[i].quantityRequired=Number(e.target.value);setFormData({...formData,recipes:x})}} className="w-24 rounded-lg bg-slate-950 border border-slate-800 p-2 text-white"/><input type="number" value={r.wastagePercent} onChange={e=>{const x=[...formData.recipes];x[i].wastagePercent=Number(e.target.value);setFormData({...formData,recipes:x})}} className="w-24 rounded-lg bg-slate-950 border border-slate-800 p-2 text-white"/><button type="button" onClick={()=>removeRecipeRow(i)} className="text-rose-400"><X className="h-4 w-4"/></button></div>)}</div>
+              <div className="flex justify-end gap-2"><button type="button" onClick={()=>setEditingProduct(null)} className="rounded-xl border border-slate-700 px-4 py-2">انصراف</button><button disabled={saving} className="rounded-xl bg-cyan-600 px-4 py-2 font-bold">ذخیره</button></div>
             </form>
           </div>
         </div>

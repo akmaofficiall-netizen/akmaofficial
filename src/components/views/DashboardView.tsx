@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import {
   TrendingUp,
@@ -38,15 +38,14 @@ export const DashboardView: React.FC<DashboardProps> = ({ selectedProjectId, onN
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = async () => {
     setLoading(true);
     try {
       const projParam = selectedProjectId ? `&projectId=${selectedProjectId}` : "";
-      const alertParam = selectedProjectId ? `?projectId=${selectedProjectId}` : "";
       const [dashRes, salesRes, alertRes] = await Promise.all([
         fetch(`/api/reports?type=dashboard${projParam}`).then((r) => r.json()),
         fetch(`/api/reports?type=sales${projParam}`).then((r) => r.json()),
-        fetch(`/api/alerts${alertParam}`).then((r) => r.json()),
+        fetch(`/api/alerts${selectedProjectId ? "?projectId=" + selectedProjectId : ""}`).then((r) => r.json()),
       ]);
 
       if (dashRes.success) setData(dashRes.data);
@@ -57,11 +56,11 @@ export const DashboardView: React.FC<DashboardProps> = ({ selectedProjectId, onN
     } finally {
       setLoading(false);
     }
-  }, [selectedProjectId]);
+  };
 
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]);
+  }, [selectedProjectId]);
 
   if (loading) {
     return (

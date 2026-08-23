@@ -28,6 +28,14 @@ export const projects = pgTable("projects", {
   pricingSettings: jsonb("pricing_settings").default({ defaultMarginPercent: 25 }),
   commissionSettings: jsonb("commission_settings").default({ defaultRatePercent: 5 }),
   accountingSettings: jsonb("accounting_settings").default({ taxEnabled: false, defaultTaxRate: 10 }),
+  managerEmployeeId: uuid("manager_employee_id"),
+  logoUrl: text("logo_url"),
+  targetMonthlySales: numeric("target_monthly_sales", { precision: 15, scale: 2 }).default("0"),
+  targetYearlySales: numeric("target_yearly_sales", { precision: 15, scale: 2 }).default("0"),
+  targetCustomerCount: integer("target_customer_count").default(0),
+  targetProfit: numeric("target_profit", { precision: 15, scale: 2 }).default("0"),
+  targetCollection: numeric("target_collection", { precision: 15, scale: 2 }).default("0"),
+  independentSalesAllowed: boolean("independent_sales_allowed").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -83,9 +91,22 @@ export const employees = pgTable("employees", {
   id: uuid("id").defaultRandom().primaryKey(),
   code: text("code").notNull().unique(),
   name: text("name").notNull(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
   mobile: text("mobile").notNull(),
-  role: text("role").default("visitor").notNull(), // visitor, manager, accountant, warehouse, admin
-  status: text("status").default("active").notNull(), // active, inactive, archived, transferred
+  phone: text("phone"),
+  nationalId: text("national_id"),
+  avatarUrl: text("avatar_url"),
+  birthDate: timestamp("birth_date"),
+  address: text("address"),
+  description: text("description"),
+  cooperationType: text("cooperation_type").default("visitor").notNull(),
+  role: text("role").default("visitor").notNull(),
+  status: text("status").default("active").notNull(),
+  offboardingStage: text("offboarding_stage").default("active").notNull(),
+  startedAt: timestamp("started_at").defaultNow(),
+  activityScope: text("activity_scope"),
+  managerId: uuid("manager_id"),
   baseSalary: numeric("base_salary", { precision: 15, scale: 2 }).default("0"),
   commissionRatePercent: numeric("commission_rate_percent", { precision: 5, scale: 2 }).default("5"),
   notes: text("notes"),
@@ -100,6 +121,85 @@ export const employeeProjectMemberships = pgTable("employee_project_memberships"
 }, (t) => [
   primaryKey({ columns: [t.employeeId, t.projectId] })
 ]);
+
+export const customerAssignments = pgTable("customer_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  customerId: uuid("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id").references(() => employees.id),
+  projectId: uuid("project_id").references(() => projects.id),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  assignedBy: text("assigned_by").default("system"),
+  assignmentReason: text("assignment_reason"),
+  status: text("status").default("active").notNull(),
+  endedAt: timestamp("ended_at"),
+});
+
+export const roles = pgTable("roles", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  projectScoped: boolean("project_scoped").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const permissions = pgTable("permissions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+});
+
+export const rolePermissions = pgTable("role_permissions", {
+  roleId: uuid("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  permissionId: uuid("permission_id").notNull().references(() => permissions.id, { onDelete: "cascade" }),
+}, (t) => [primaryKey({ columns: [t.roleId, t.permissionId] })]);
+
+export const employeeAccounts = pgTable("employee_accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().unique().references(() => employees.id, { onDelete: "cascade" }),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  roleId: uuid("role_id").references(() => roles.id),
+  status: text("status").default("active").notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const employeeProjectAssignments = pgTable("employee_project_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  role: text("role").default("member").notNull(),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  status: text("status").default("active").notNull(),
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }),
+  projectSalary: numeric("project_salary", { precision: 15, scale: 2 }).default("0"),
+  permissionSet: jsonb("permission_set").default({}),
+}, (t) => [uniqueIndex("uniq_employee_project_assignment").on(t.employeeId, t.projectId)]);
+
+export const projectCompensations = pgTable("project_compensations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  effectiveStartDate: timestamp("effective_start_date").defaultNow().notNull(),
+  effectiveEndDate: timestamp("effective_end_date"),
+  status: text("status").default("active").notNull(),
+  notes: text("notes"),
+});
+
+export const projectTargets = pgTable("project_targets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  salesTarget: numeric("sales_target", { precision: 15, scale: 2 }).default("0"),
+  customerTarget: integer("customer_target").default(0),
+  profitTarget: numeric("profit_target", { precision: 15, scale: 2 }).default("0"),
+  collectionTarget: numeric("collection_target", { precision: 15, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // 4. Suppliers
 export const suppliers = pgTable("suppliers", {
@@ -185,6 +285,8 @@ export const projectProductPrices = pgTable("project_product_prices", {
   projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   customPrice: numeric("custom_price", { precision: 15, scale: 2 }).notNull(),
+  effectiveStartDate: timestamp("effective_start_date").defaultNow(),
+  effectiveEndDate: timestamp("effective_end_date"),
   overrideCommissionRate: numeric("override_commission_rate", { precision: 5, scale: 2 }),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
@@ -306,6 +408,8 @@ export const invoices = pgTable("invoices", {
   paymentStatus: text("payment_status").default("unpaid").notNull(), // unpaid, partial, paid, overdue
   status: text("status").default("issued").notNull(), // issued, cancelled, reversed, corrected
   reversalReason: text("reversal_reason"),
+  commissionSnapshot: jsonb("commission_snapshot"),
+  priceSnapshot: jsonb("price_snapshot"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -383,6 +487,8 @@ export const commissionRules = pgTable("commission_rules", {
 export const commissionLedger = pgTable("commission_ledger", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeId: uuid("employee_id").notNull().references(() => employees.id),
+  recipientEmployeeId: uuid("recipient_employee_id").references(() => employees.id),
+  commissionType: text("commission_type").default("employee").notNull(),
   invoiceId: uuid("invoice_id").references(() => invoices.id),
   projectId: uuid("project_id").references(() => projects.id),
   ruleSnapshot: jsonb("rule_snapshot").notNull(),
@@ -515,7 +621,7 @@ export const systemSettings = pgTable("system_settings", {
   healthYellowThreshold: integer("health_yellow_threshold").default(50),
   mapProvider: text("map_provider").default("neshan"),
   openaiApiKey: text("openai_api_key"),
-  openaiModel: text("openai_model").default("gpt-4o"),
+  openaiModel: text("openai_model").default("gemini-2.5-flash"),
   aiEnabled: boolean("ai_enabled").default(true),
   autoBackupIntervalHours: integer("auto_backup_interval_hours").default(24),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

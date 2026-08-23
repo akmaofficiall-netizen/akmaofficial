@@ -19,6 +19,7 @@ import {
   Database,
   Settings,
   Folder,
+  FolderKanban,
   Search,
   X,
   Menu,
@@ -30,6 +31,7 @@ interface AppLayoutProps {
   setActiveTab: (tab: string) => void;
   selectedProjectId: string | null;
   setSelectedProjectId: (id: string | null) => void;
+  me: any;
   children: React.ReactNode;
 }
 
@@ -38,6 +40,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   setActiveTab,
   selectedProjectId,
   setSelectedProjectId,
+  me,
   children,
 }) => {
   const [projects, setProjects] = useState<any[]>([]);
@@ -48,13 +51,24 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  useEffect(() => {
+  const loadProjects = () => {
     fetch("/api/projects")
       .then((r) => r.json())
       .then((data) => {
         if (data.success) setProjects(data.projects || []);
       })
       .catch((err) => console.error("Error loading projects:", err));
+  };
+
+  useEffect(() => {
+    loadProjects();
+    const handleUpdate = () => loadProjects();
+    window.addEventListener("akma:projects-updated", handleUpdate);
+    window.addEventListener("focus", handleUpdate);
+    return () => {
+      window.removeEventListener("akma:projects-updated", handleUpdate);
+      window.removeEventListener("focus", handleUpdate);
+    };
   }, []);
 
   const handleSearch = async (val: string) => {
@@ -87,12 +101,23 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     { id: "purchases", label: "تامین‌کنندگان و خرید", icon: ShoppingCart },
     { id: "financial", label: "حسابداری و نقدینگی", icon: DollarSign },
     { id: "employees", label: "همکاران و ویزیتورها", icon: UserCheck },
+    { id: "projects", label: "پروژه‌ها و Scope", icon: FolderKanban },
     { id: "reports", label: "مرکز گزارشات و سود", icon: BarChart2 },
     { id: "alerts", label: "مرکز اعلانات", icon: AlertTriangle },
     { id: "ai", label: "مشاور هوش مصنوعی", icon: Bot },
     { id: "backup", label: "پشتیبان‌گیری دیتابیس", icon: Database },
-    { id: "settings", label: "تنظیمات سیستم", icon: Settings },
+    { id: "settings", label: "تنظیمات سیستم", icon: Settings, permission: "settings.view" },
   ];
+
+  const permissionByTab: Record<string, string> = {
+    invoices: "invoices.view", raw_materials: "raw_materials.view", products: "products.view", production: "production.view",
+    inventory: "inventory.view", customers: "customers.view", customer_map: "customers.view", purchases: "purchases.view",
+    financial: "financial.view", employees: "employees.view", projects: "projects.view", reports: "reports.view",
+    alerts: "alerts.view", ai: "ai.view", backup: "backup.view", settings: "settings.view",
+  };
+  const perms = new Set<string>(me?.permissions || []);
+  const canSee = (id: string) => id === "dashboard" || perms.has("*") || perms.has(permissionByTab[id] || "");
+  const visibleNavItems = navItems.filter((item) => canSee(item.id));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans dir-rtl flex flex-col antialiased">
@@ -181,6 +206,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             </div>
           )}
         </div>
+        <div className="flex items-center gap-2 mr-3">
+          <div className="hidden sm:block text-right">
+            <div className="text-xs font-bold text-white">{me?.employee?.name || "کاربر"}</div>
+            <div className="text-[10px] text-slate-500">{me?.role?.name || me?.role?.code || ""}</div>
+          </div>
+          <button onClick={async () => { await fetch("/api/auth/employee-logout", { method: "POST" }); window.location.href = "/employee-login"; }} className="rounded-xl border border-slate-800 px-3 py-2 text-[10px] text-slate-400 hover:text-white">خروج</button>
+        </div>
       </header>
 
       {/* Workspace Container */}
@@ -199,7 +231,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </div>
 
           <nav className="space-y-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (

@@ -34,7 +34,7 @@ export async function PUT(req: Request) {
         healthGreenThreshold: body.healthGreenThreshold ? Number(body.healthGreenThreshold) : 75,
         healthYellowThreshold: body.healthYellowThreshold ? Number(body.healthYellowThreshold) : 50,
         openaiApiKey: body.openaiApiKey,
-        openaiModel: body.openaiModel || "gpt-4o",
+        openaiModel: /^gpt-/i.test(body.openaiModel || "") ? "gemini-2.5-flash" : (body.openaiModel || "gemini-2.5-flash"),
         aiEnabled: body.aiEnabled !== undefined ? body.aiEnabled : true,
         updatedAt: new Date(),
       })
@@ -47,7 +47,7 @@ export async function PUT(req: Request) {
           healthGreenThreshold: body.healthGreenThreshold ? Number(body.healthGreenThreshold) : 75,
           healthYellowThreshold: body.healthYellowThreshold ? Number(body.healthYellowThreshold) : 50,
           openaiApiKey: body.openaiApiKey,
-          openaiModel: body.openaiModel || "gpt-4o",
+          openaiModel: /^gpt-/i.test(body.openaiModel || "") ? "gemini-2.5-flash" : (body.openaiModel || "gemini-2.5-flash"),
           aiEnabled: body.aiEnabled,
           updatedAt: new Date(),
         },

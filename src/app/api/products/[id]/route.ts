@@ -4,9 +4,11 @@ import { products, productRecipes, rawMaterials, projectProductPrices, projects 
 import { eq } from "drizzle-orm";
 import { updateProductCostFromBOM } from "@/services/pricing";
 import { logAuditEvent } from "@/services/audit";
+import { requirePermission } from "@/services/access";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requirePermission("products.view");
     const { id } = await params;
     const [product] = await db.select().from(products).where(eq(products.id, id)).limit(1);
     if (!product) {
@@ -58,6 +60,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requirePermission("products.update");
     const { id } = await params;
     const body = await req.json();
 

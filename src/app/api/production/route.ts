@@ -17,7 +17,7 @@ export async function GET() {
       .leftJoin(projects, eq(productionBatches.projectId, projects.id))
       .orderBy(desc(productionBatches.createdAt));
 
-    const formatted = list.map(({ batch, productName, projectName }: any) => ({
+    const formatted = list.map(({ batch, productName, projectName }) => ({
       ...batch,
       productName,
       projectName: projectName || "عمومی",

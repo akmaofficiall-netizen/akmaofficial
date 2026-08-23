@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import { Database, Download, RefreshCw, ShieldCheck, Plus } from "lucide-react";
+import { toJalaliDate } from "@/lib/dateUtils";
 
 export const BackupView: React.FC = () => {
   const [backups, setBackups] = useState<any[]>([]);
@@ -75,19 +76,17 @@ export const BackupView: React.FC = () => {
                 <th className="p-3">تاریخ ثبت</th>
                 <th className="p-3">حجم فایل</th>
                 <th className="p-3">شناسه صحت (Checksum)</th>
-                <th className="p-3">وضعیت</th>
+                <th className="p-3">وضعیت</th><th className="p-3">دانلود</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {backups.map((b) => (
                 <tr key={b.id} className="hover:bg-slate-800/40">
                   <td className="p-3 font-mono font-bold text-white">{b.filename}</td>
-                  <td className="p-3 text-slate-400">{new Date(b.createdAt).toLocaleString("fa-IR")}</td>
+                  <td className="p-3 text-slate-400">{toJalaliDate(b.createdAt, { showTime: true })}</td>
                   <td className="p-3 text-slate-300">{(b.sizeBytes / 1024).toFixed(1)} KB</td>
                   <td className="p-3 font-mono text-[10px] text-slate-500">{b.checksum}</td>
-                  <td className="p-3">
-                    <NeonBadge variant="green">کامل و معتبر</NeonBadge>
-                  </td>
+                  <td className="p-3"><NeonBadge variant="green">کامل و معتبر</NeonBadge></td><td className="p-3"><a href={`/api/backups/${b.id}`} className="inline-flex items-center gap-1 rounded-lg bg-blue-500/10 px-3 py-1.5 text-blue-300">دانلود</a></td>
                 </tr>
               ))}
             </tbody>

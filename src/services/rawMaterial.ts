@@ -38,31 +38,23 @@ export interface UpdateRawMaterialInput {
  * Creates a new Raw Material
  */
 export async function createRawMaterial(input: CreateRawMaterialInput) {
-  let rm: typeof rawMaterials.$inferSelect;
-  try {
-    [rm] = await db
-      .insert(rawMaterials)
-      .values({
-        code: input.code,
-        name: input.name,
-        unit: input.unit || "کیلوگرم",
-        unitConversionFactor: (input.unitConversionFactor || 1).toString(),
-        secondaryUnit: input.secondaryUnit || null,
-        stockQuantity: (input.stockQuantity || 0).toString(),
-        minStockQuantity: (input.minStockQuantity || 10).toString(),
-        currentCost: input.currentCost.toString(),
-        averageCost: input.currentCost.toString(),
-        supplierId: input.supplierId || null,
-        costPolicy: input.costPolicy || "average",
-        notes: input.notes || null,
-      })
-      .returning();
-  } catch (error: any) {
-    if (error?.code === "23505" && String(error?.constraint || "").includes("raw_materials_code")) {
-      throw new Error("کد ماده اولیه تکراری است. لطفاً یک کد دیگر انتخاب کنید.");
-    }
-    throw error;
-  }
+  const [rm] = await db
+    .insert(rawMaterials)
+    .values({
+      code: input.code,
+      name: input.name,
+      unit: input.unit || "کیلوگرم",
+      unitConversionFactor: (input.unitConversionFactor || 1).toString(),
+      secondaryUnit: input.secondaryUnit || null,
+      stockQuantity: (input.stockQuantity || 0).toString(),
+      minStockQuantity: (input.minStockQuantity || 10).toString(),
+      currentCost: input.currentCost.toString(),
+      averageCost: input.currentCost.toString(),
+      supplierId: input.supplierId || null,
+      costPolicy: input.costPolicy || "average",
+      notes: input.notes || null,
+    })
+    .returning();
 
   // Initial Price History entry
   await db.insert(rawMaterialPriceHistory).values({
@@ -112,7 +104,7 @@ export async function updateRawMaterial(id: string, input: UpdateRawMaterialInpu
     // Calculate weighted average cost if cost policy is average
     const currentStock = Number(existing.stockQuantity) || 0;
     const oldAvg = Number(existing.averageCost) || oldCost;
-    const newAvg = currentStock > 0 ? oldAvg : newCost;
+    const newAvg = currentStock > 0 ? (oldAvg + newCost) / 2 : newCost;
     updatePayload.averageCost = Math.round(newAvg * 100) / 100;
 
     const changePercent = oldCost > 0 ? Math.round(((newCost - oldCost) / oldCost) * 10000) / 100 : 100;
@@ -140,7 +132,7 @@ export async function updateRawMaterial(id: string, input: UpdateRawMaterialInpu
       .from(productRecipes)
       .where(eq(productRecipes.rawMaterialId, id));
 
-    const affectedProductIds: string[] = Array.from(new Set(affectedRecipes.map((r: any) => r.productId as string)));
+    const affectedProductIds = Array.from(new Set(affectedRecipes.map((r) => r.productId)));
 
     for (const prodId of affectedProductIds) {
       await updateProductCostFromBOM(prodId);

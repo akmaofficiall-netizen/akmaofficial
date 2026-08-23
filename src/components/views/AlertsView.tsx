@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import { AlertTriangle, CheckCircle, RefreshCw, Filter } from "lucide-react";
+import { toJalaliDate } from "@/lib/dateUtils";
 
 export const AlertsView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAlerts = useCallback(async () => {
+  const fetchAlerts = async () => {
     setLoading(true);
     try {
       const projParam = selectedProjectId ? `?projectId=${selectedProjectId}` : "";
@@ -19,11 +20,11 @@ export const AlertsView: React.FC<{ selectedProjectId: string | null }> = ({ sel
     } finally {
       setLoading(false);
     }
-  }, [selectedProjectId]);
+  };
 
   useEffect(() => {
     fetchAlerts();
-  }, [fetchAlerts]);
+  }, [selectedProjectId]);
 
   const handleResolve = async (alertId: string) => {
     try {
@@ -80,7 +81,7 @@ export const AlertsView: React.FC<{ selectedProjectId: string | null }> = ({ sel
                     </NeonBadge>
                   </div>
                   <p className="text-xs text-slate-300">{a.message}</p>
-                  <p className="text-[10px] text-slate-500">{new Date(a.createdAt).toLocaleDateString("fa-IR")}</p>
+                  <p className="text-[10px] text-slate-500">{toJalaliDate(a.createdAt, { showTime: true })}</p>
                 </div>
               </div>
 

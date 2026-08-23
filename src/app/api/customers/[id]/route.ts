@@ -4,9 +4,11 @@ import { customers, invoices, payments, customerHealthLogs, employees } from "@/
 import { eq, desc } from "drizzle-orm";
 import { recalculateCustomerHealth } from "@/services/customerHealth";
 import { logAuditEvent } from "@/services/audit";
+import { getEmployeeContext, requirePermission } from "@/services/access";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const context = await requirePermission("customers.view");
     const { id } = await params;
 
     const [customer] = await db
@@ -21,6 +23,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     if (!customer) {
       return NextResponse.json({ success: false, error: "مشتری یافت نشد" }, { status: 404 });
+    }
+    if (context && !context.permissions.has("*") && customer.customer.assignedEmployeeId !== context.employeeId) {
+      return NextResponse.json({ success: false, error: "این مشتری متعلق به شما نیست" }, { status: 403 });
     }
 
     const customerInvoices = await db
@@ -60,8 +65,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const context = await requirePermission("customers.update");
     const { id } = await params;
     const body = await req.json();
+    const [owned] = await db.select({ assignedEmployeeId: customers.assignedEmployeeId }).from(customers).where(eq(customers.id, id)).limit(1);
+    if (!owned) return NextResponse.json({ success:false,error:"مشتری یافت نشد"},{status:404});
+    if (!context.permissions.has("*") && owned.assignedEmployeeId !== context.employeeId) return NextResponse.json({success:false,error:"این مشتری متعلق به شما نیست"},{status:403});
+    const canTransfer = context.permissions.has("*") || context.permissions.has("customers.transfer");
+    if (body.assignedEmployeeId !== undefined && !canTransfer) {
+      delete body.assignedEmployeeId;
+    }
+    const nextAssignedEmployeeId = canTransfer ? (body.assignedEmployeeId !== undefined ? body.assignedEmployeeId : owned.assignedEmployeeId) : owned.assignedEmployeeId;
 
     const [updated] = await db
       .update(customers)
@@ -75,7 +89,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         city: body.city,
         latitude: body.latitude !== undefined ? body.latitude.toString() : undefined,
         longitude: body.longitude !== undefined ? body.longitude.toString() : undefined,
-        assignedEmployeeId: body.assignedEmployeeId,
+        assignedEmployeeId: nextAssignedEmployeeId,
         notes: body.notes,
         updatedAt: new Date(),
       })

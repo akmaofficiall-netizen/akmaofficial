@@ -17,7 +17,7 @@ export async function GET() {
       .leftJoin(projects, eq(expenses.projectId, projects.id))
       .orderBy(desc(expenses.createdAt));
 
-    const formatted = list.map(({ expense, accountName, projectName }: any) => ({
+    const formatted = list.map(({ expense, accountName, projectName }) => ({
       ...expense,
       accountName: accountName || "-",
       projectName: projectName || "عمومی",

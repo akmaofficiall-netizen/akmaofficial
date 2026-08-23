@@ -15,7 +15,7 @@ import {
   commissionLedger,
   accounts
 } from "@/db/schema";
-import { eq, and, gte, lte, sql, desc, inArray } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export interface ReportFilter {
   startDate?: Date | null;
@@ -29,17 +29,6 @@ export interface ReportFilter {
   salesMode?: string | null;
 }
 
-/**
- * Filter helper for project scoping
- */
-function applyProjectFilter(queryWhere: any[], projectIdField: any, filter: ReportFilter) {
-  if (filter.projectId) {
-    queryWhere.push(eq(projectIdField, filter.projectId));
-  } else if (filter.excludeProjectIds && filter.excludeProjectIds.length > 0) {
-    // Exclude selected projects
-    queryWhere.push(sql`${projectIdField} NOT IN (${filter.excludeProjectIds.join(",")}) OR ${projectIdField} IS NULL`);
-  }
-}
 
 /**
  * 1. Dashboard Executive KPIs & Overview
@@ -53,7 +42,7 @@ export async function getDashboardKPIs(filter: ReportFilter = {}) {
   const allAccounts = await db.select().from(accounts);
 
   // Apply project filter in memory for consistency across all entities
-  const scopedInvoices = allInvoices.filter((inv: any) => {
+  const scopedInvoices = allInvoices.filter((inv) => {
     if (inv.status === "reversed") return false;
     if (filter.projectId && inv.projectId !== filter.projectId) return false;
     if (filter.excludeProjectIds?.includes(inv.projectId || "")) return false;
@@ -62,7 +51,7 @@ export async function getDashboardKPIs(filter: ReportFilter = {}) {
     return true;
   });
 
-  const scopedExpenses = allExpenses.filter((exp: any) => {
+  const scopedExpenses = allExpenses.filter((exp) => {
     if (filter.projectId && exp.projectId !== filter.projectId) return false;
     if (filter.excludeProjectIds?.includes(exp.projectId || "")) return false;
     if (filter.startDate && new Date(exp.expenseDate) < filter.startDate) return false;
@@ -111,9 +100,9 @@ export async function getDashboardKPIs(filter: ReportFilter = {}) {
   }
 
   // Customer Health Breakdown scoped to active context
-  const greenCustomers = allCustomers.filter((c: any) => c.healthStatus === "green").length;
-  const yellowCustomers = allCustomers.filter((c: any) => c.healthStatus === "yellow").length;
-  const redCustomers = allCustomers.filter((c: any) => c.healthStatus === "red").length;
+  const greenCustomers = allCustomers.filter((c) => c.healthStatus === "green").length;
+  const yellowCustomers = allCustomers.filter((c) => c.healthStatus === "yellow").length;
+  const redCustomers = allCustomers.filter((c) => c.healthStatus === "red").length;
 
   return {
     totalSales,
@@ -151,7 +140,7 @@ export async function getSalesReport(filter: ReportFilter = {}) {
     .leftJoin(employees, eq(invoices.employeeId, employees.id))
     .orderBy(desc(invoices.invoiceDate));
 
-  const filtered = invoiceList.filter(({ invoice }: any) => {
+  const filtered = invoiceList.filter(({ invoice }) => {
     if (invoice.status === "reversed") return false;
     if (filter.projectId && invoice.projectId !== filter.projectId) return false;
     if (filter.excludeProjectIds?.includes(invoice.projectId || "")) return false;
@@ -211,7 +200,7 @@ export async function getSalesReport(filter: ReportFilter = {}) {
       averageInvoiceValue: filtered.length > 0 ? Math.round(netSales / filtered.length) : 0,
     },
     chartData,
-    invoices: filtered.map(({ invoice, customerName, customerStore, projectName, employeeName }: any) => ({
+    invoices: filtered.map(({ invoice, customerName, customerStore, projectName, employeeName }) => ({
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.invoiceDate,
@@ -236,7 +225,7 @@ export async function getFinancialProfitReport(filter: ReportFilter = {}) {
   const allExpenses = await db.select().from(expenses);
   const allCommissions = await db.select().from(commissionLedger);
 
-  const scopedInvoices = allInvoices.filter((inv: any) => {
+  const scopedInvoices = allInvoices.filter((inv) => {
     if (inv.status === "reversed") return false;
     if (filter.projectId && inv.projectId !== filter.projectId) return false;
     if (filter.excludeProjectIds?.includes(inv.projectId || "")) return false;
@@ -245,7 +234,7 @@ export async function getFinancialProfitReport(filter: ReportFilter = {}) {
     return true;
   });
 
-  const scopedExpenses = allExpenses.filter((exp: any) => {
+  const scopedExpenses = allExpenses.filter((exp) => {
     if (filter.projectId && exp.projectId !== filter.projectId) return false;
     if (filter.excludeProjectIds?.includes(exp.projectId || "")) return false;
     if (filter.startDate && new Date(exp.expenseDate) < filter.startDate) return false;
@@ -253,7 +242,7 @@ export async function getFinancialProfitReport(filter: ReportFilter = {}) {
     return true;
   });
 
-  const scopedCommissions = allCommissions.filter((c: any) => {
+  const scopedCommissions = allCommissions.filter((c) => {
     if (filter.projectId && c.projectId !== filter.projectId) return false;
     if (filter.excludeProjectIds?.includes(c.projectId || "")) return false;
     return true;
@@ -418,7 +407,7 @@ export async function getInventoryAndRawMaterialReport(filter: ReportFilter = {}
   return {
     totalRawMaterialValue: totalRmValue,
     rawMaterials: rawMaterialDetails,
-    products: allProducts.map((p: any) => ({
+    products: allProducts.map((p) => ({
       id: p.id,
       code: p.code,
       name: p.name,
