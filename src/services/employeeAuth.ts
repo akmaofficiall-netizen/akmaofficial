@@ -1,6 +1,0 @@
-import crypto from "node:crypto";
-const secret=()=>process.env.AUTH_SECRET||process.env.AUTH_SALT||"CHANGE_ME_AKMA_AUTH_SECRET";
-export function hashPassword(password:string){const salt=crypto.randomBytes(16).toString("hex");const derived=crypto.scryptSync(password,salt,64).toString("hex");return `${salt}:${derived}`;}
-export function verifyPassword(password:string,stored:string){const [salt,hash]=stored.split(":");if(!salt||!hash)return false;const actual=crypto.scryptSync(password,salt,64).toString("hex");const a=Buffer.from(actual,"hex"),b=Buffer.from(hash,"hex");return a.length===b.length&&crypto.timingSafeEqual(a,b);}
-export function signSession(employeeId:string){const payload=Buffer.from(`${employeeId}.${Date.now()}`).toString("base64url");const sig=crypto.createHmac("sha256",secret()).update(payload).digest("base64url");return `${payload}.${sig}`;}
-export function verifySession(token:string){const [payload,sig]=token.split(".");if(!payload||!sig)return null;const expected=crypto.createHmac("sha256",secret()).update(payload).digest("base64url");const a=Buffer.from(sig),b=Buffer.from(expected);if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return null;try{const [id,ts]=Buffer.from(payload,"base64url").toString("utf8").split(".");if(!id||!ts||Date.now()-Number(ts)>12*60*60*1000)return null;return id;}catch{return null;}}
