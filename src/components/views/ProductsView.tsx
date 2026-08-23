@@ -13,7 +13,8 @@ import {
   Search,
   CheckCircle,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Sliders
 } from "lucide-react";
 
 export const ProductsView: React.FC = () => {
@@ -26,6 +27,9 @@ export const ProductsView: React.FC = () => {
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
+  const [adjustQty, setAdjustQty] = useState(0);
+  const [adjustReason, setAdjustReason] = useState("");
   const [managingProjectPrice, setManagingProjectPrice] = useState<any | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [customProjectPrice, setCustomPrice] = useState(0);
@@ -37,6 +41,7 @@ export const ProductsView: React.FC = () => {
     category: "پنجره",
     unit: "عدد",
     basePrice: 0,
+    stockQuantity: 0,
     minStockQuantity: 5,
     recipes: [] as { rawMaterialId: string; quantityRequired: number; wastagePercent: number }[],
   });
@@ -71,6 +76,7 @@ export const ProductsView: React.FC = () => {
       category: "عمومی",
       unit: "عدد",
       basePrice: 0,
+      stockQuantity: 0,
       minStockQuantity: 5,
       recipes: [],
     });
@@ -97,6 +103,36 @@ export const ProductsView: React.FC = () => {
         fetchData();
       } else {
         alert(res.error || "خطا در ثبت محصول");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در ارتباط با سرور");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveStockAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingProduct) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "adjust_stock",
+          productId: adjustingProduct.id,
+          newQuantity: adjustQty,
+          reason: adjustReason || "تعدیل دستی موجودی محصول",
+        }),
+      }).then((r) => r.json());
+
+      if (res.success) {
+        setAdjustingProduct(null);
+        fetchData();
+      } else {
+        alert(res.error || "خطا در تعدیل موجودی محصول");
       }
     } catch (err: any) {
       alert(err.message || "خطا در ارتباط با سرور");
@@ -160,16 +196,44 @@ export const ProductsView: React.FC = () => {
   };
 
   const openEditProduct = async (product: any) => {
-    const res = await fetch(`/api/products/${product.id}`).then(r=>r.json());
+    const res = await fetch(`/api/products/${product.id}`).then((r) => r.json());
     if (!res.success) return alert(res.error || "خطا در دریافت محصول");
     setEditingProduct(res.product);
-    setFormData({ code: res.product.code, name: res.product.name, category: res.product.category, unit: res.product.unit, basePrice: Number(res.product.basePrice), minStockQuantity: Number(res.product.minStockQuantity), recipes: (res.recipes||[]).map((r:any)=>({rawMaterialId:r.rawMaterialId, quantityRequired:Number(r.quantityRequired), wastagePercent:Number(r.wastagePercent||0)})) });
+    setFormData({
+      code: res.product.code,
+      name: res.product.name,
+      category: res.product.category,
+      unit: res.product.unit,
+      basePrice: Number(res.product.basePrice),
+      stockQuantity: Number(res.product.stockQuantity || 0),
+      minStockQuantity: Number(res.product.minStockQuantity || 5),
+      recipes: (res.recipes || []).map((r: any) => ({
+        rawMaterialId: r.rawMaterialId,
+        quantityRequired: Number(r.quantityRequired),
+        wastagePercent: Number(r.wastagePercent || 0),
+      })),
+    });
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!editingProduct) return; setSaving(true);
-    try { const res = await fetch(`/api/products/${editingProduct.id}`, { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(formData) }).then(r=>r.json()); if(res.success){setEditingProduct(null);fetchData();} else alert(res.error||"خطا در ویرایش محصول"); }
-    catch(err:any){ alert(err.message||"خطا"); } finally { setSaving(false); }
+    e.preventDefault();
+    if (!editingProduct) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/products/${editingProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      }).then((r) => r.json());
+      if (res.success) {
+        setEditingProduct(null);
+        fetchData();
+      } else alert(res.error || "خطا در ویرایش محصول");
+    } catch (err: any) {
+      alert(err.message || "خطا");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filteredProducts = products.filter(
@@ -252,17 +316,35 @@ export const ProductsView: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between pt-2 gap-2">
-                <button onClick={() => openEditProduct(p)} className="flex items-center gap-1.5 rounded-xl bg-cyan-600/15 border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300"><Edit2 className="h-3.5 w-3.5"/>ویرایش و BOM</button>
+                <button
+                  onClick={() => openEditProduct(p)}
+                  className="flex items-center gap-1.5 rounded-xl bg-cyan-600/15 border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-600/25 transition-all"
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  ویرایش و BOM
+                </button>
+                <button
+                  onClick={() => {
+                    setAdjustingProduct(p);
+                    setAdjustQty(p.stockQuantity);
+                    setAdjustReason("");
+                  }}
+                  title="تعدیل دستی موجودی"
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600/15 border border-emerald-500/30 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/25 transition-all"
+                >
+                  <Sliders className="h-3.5 w-3.5" />
+                  تعدیل موجودی
+                </button>
                 <button
                   onClick={() => {
                     setManagingProjectPrice(p);
                     setSelectedProjectId(projects[0]?.id || "");
                     setCustomPrice(p.basePrice);
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600/20 border border-blue-500/30 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 transition-all"
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600/20 border border-blue-500/30 px-2.5 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 transition-all"
                 >
                   <Folder className="h-3.5 w-3.5" />
-                  قیمت‌گذاری پروژه
+                  قیمت پروژه
                 </button>
               </div>
             </div>
@@ -336,6 +418,27 @@ export const ProductsView: React.FC = () => {
                     value={formData.basePrice}
                     onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-bold text-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">موجودی اولیه در انبار</label>
+                  <input
+                    type="number"
+                    value={formData.stockQuantity}
+                    onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">حداقل موجودی هشدار</label>
+                  <input
+                    type="number"
+                    value={formData.minStockQuantity}
+                    onChange={(e) => setFormData({ ...formData, minStockQuantity: Number(e.target.value) })}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
                   />
                 </div>
               </div>
@@ -416,14 +519,229 @@ export const ProductsView: React.FC = () => {
       )}
 
       {editingProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm overflow-y-auto">
           <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4 my-8">
-            <div className="flex items-center justify-between"><h3 className="text-base font-bold text-white">ویرایش محصول و فرمول ساخت</h3><button onClick={()=>setEditingProduct(null)}><X className="h-5 w-5 text-slate-400"/></button></div>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-cyan-400" />
+                ویرایش مشخصات، موجودی و فرمول محصول
+              </h3>
+              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3"><input required value={formData.code} onChange={e=>setFormData({...formData,code:e.target.value})} placeholder="کد" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/><input required value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} placeholder="نام" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/></div>
-              <div className="grid grid-cols-3 gap-3"><input value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})} placeholder="دسته" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/><input value={formData.unit} onChange={e=>setFormData({...formData,unit:e.target.value})} placeholder="واحد" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/><input type="number" value={formData.basePrice} onChange={e=>setFormData({...formData,basePrice:Number(e.target.value)})} placeholder="قیمت" className="rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"/></div>
-              <div className="border-t border-slate-800 pt-3 space-y-2"><div className="flex justify-between"><b>فرمول ساخت (BOM)</b><button type="button" onClick={addRecipeRow} className="text-emerald-400">+ ماده اولیه</button></div>{formData.recipes.map((r,i)=><div key={i} className="flex gap-2"><select value={r.rawMaterialId} onChange={e=>{const x=[...formData.recipes];x[i].rawMaterialId=e.target.value;setFormData({...formData,recipes:x})}} className="flex-1 rounded-lg bg-slate-950 border border-slate-800 p-2 text-white">{rawMaterials.map(rm=><option key={rm.id} value={rm.id}>{rm.name} ({rm.unit})</option>)}</select><input type="number" value={r.quantityRequired} onChange={e=>{const x=[...formData.recipes];x[i].quantityRequired=Number(e.target.value);setFormData({...formData,recipes:x})}} className="w-24 rounded-lg bg-slate-950 border border-slate-800 p-2 text-white"/><input type="number" value={r.wastagePercent} onChange={e=>{const x=[...formData.recipes];x[i].wastagePercent=Number(e.target.value);setFormData({...formData,recipes:x})}} className="w-24 rounded-lg bg-slate-950 border border-slate-800 p-2 text-white"/><button type="button" onClick={()=>removeRecipeRow(i)} className="text-rose-400"><X className="h-4 w-4"/></button></div>)}</div>
-              <div className="flex justify-end gap-2"><button type="button" onClick={()=>setEditingProduct(null)} className="rounded-xl border border-slate-700 px-4 py-2">انصراف</button><button disabled={saving} className="rounded-xl bg-cyan-600 px-4 py-2 font-bold">ذخیره</button></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">کد محصول *</label>
+                  <input
+                    required
+                    value={formData.code}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    placeholder="کد"
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">نام محصول *</label>
+                  <input
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="نام"
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">دسته‌بندی</label>
+                  <input
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    placeholder="دسته"
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">واحد فروش</label>
+                  <input
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                    placeholder="واحد"
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">قیمت پایه (تومان) *</label>
+                  <input
+                    type="number"
+                    value={formData.basePrice}
+                    onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
+                    placeholder="قیمت"
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-bold text-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">موجودی فعلی در انبار ({formData.unit})</label>
+                  <input
+                    type="number"
+                    value={formData.stockQuantity}
+                    onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })}
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-mono text-emerald-300 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">حداقل موجودی هشدار</label>
+                  <input
+                    type="number"
+                    value={formData.minStockQuantity}
+                    onChange={(e) => setFormData({ ...formData, minStockQuantity: Number(e.target.value) })}
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-mono text-amber-300"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-300">فرمول ساخت (BOM)</span>
+                  <button type="button" onClick={addRecipeRow} className="text-emerald-400 font-semibold hover:underline">
+                    + افزودن ماده اولیه
+                  </button>
+                </div>
+                {formData.recipes.map((r, i) => (
+                  <div key={i} className="flex gap-2 items-center rounded-xl bg-slate-950 p-2 border border-slate-800">
+                    <select
+                      value={r.rawMaterialId}
+                      onChange={(e) => {
+                        const x = [...formData.recipes];
+                        x[i].rawMaterialId = e.target.value;
+                        setFormData({ ...formData, recipes: x });
+                      }}
+                      className="flex-1 rounded-lg bg-slate-900 border border-slate-800 p-2 text-white"
+                    >
+                      {rawMaterials.map((rm) => (
+                        <option key={rm.id} value={rm.id}>
+                          {rm.name} ({rm.unit})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      placeholder="مقدار"
+                      value={r.quantityRequired}
+                      onChange={(e) => {
+                        const x = [...formData.recipes];
+                        x[i].quantityRequired = Number(e.target.value);
+                        setFormData({ ...formData, recipes: x });
+                      }}
+                      className="w-20 rounded-lg bg-slate-900 border border-slate-800 p-2 text-white text-center"
+                    />
+                    <input
+                      type="number"
+                      placeholder="ضایعات %"
+                      value={r.wastagePercent}
+                      onChange={(e) => {
+                        const x = [...formData.recipes];
+                        x[i].wastagePercent = Number(e.target.value);
+                        setFormData({ ...formData, recipes: x });
+                      }}
+                      className="w-20 rounded-lg bg-slate-900 border border-slate-800 p-2 text-white text-center"
+                    />
+                    <button type="button" onClick={() => removeRecipeRow(i)} className="text-rose-400 p-1 hover:text-rose-300">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-slate-400 hover:text-white"
+                >
+                  انصراف
+                </button>
+                <button
+                  disabled={saving}
+                  className="rounded-xl bg-cyan-600 px-5 py-2 font-bold text-white shadow-lg shadow-cyan-600/30 hover:bg-cyan-500"
+                >
+                  {saving ? "در حال ذخیره..." : "ذخیره تغییرات"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Adjustment Modal */}
+      {adjustingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Sliders className="h-5 w-5 text-emerald-400" />
+                تعدیل مستقیم موجودی محصول در انبار
+              </h3>
+              <button onClick={() => setAdjustingProduct(null)} className="text-slate-400 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl bg-slate-950 p-3 border border-slate-800 text-xs space-y-1">
+              <p className="text-slate-400">
+                نام محصول: <span className="font-bold text-white">{adjustingProduct.name}</span>
+              </p>
+              <p className="text-slate-400">
+                موجودی فعلی در سیستم:{" "}
+                <span className="font-bold text-emerald-400">
+                  {adjustingProduct.stockQuantity} {adjustingProduct.unit}
+                </span>
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveStockAdjustment} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">مقدار جدید موجودی ({adjustingProduct.unit}) *</label>
+                <input
+                  type="number"
+                  required
+                  value={adjustQty}
+                  onChange={(e) => setAdjustQty(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white font-mono text-base font-bold text-emerald-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">علت تغییر / توضیحات</label>
+                <input
+                  type="text"
+                  placeholder="مثلاً: انبارگردانی فصلی، برگشت کالا، رفع مغایرت..."
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAdjustingProduct(null)}
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-slate-400 hover:text-white"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-xl bg-emerald-600 px-5 py-2 font-semibold text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500"
+                >
+                  {saving ? "در حال ثبت..." : "ثبت تغییر موجودی"}
+                </button>
+              </div>
             </form>
           </div>
         </div>

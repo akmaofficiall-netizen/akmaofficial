@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/services/access";
-import { queryAIAssistant } from "@/services/ai";
+import { queryAIAssistant, chatWithAI } from "@/services/ai";
 
 export async function POST(req: Request) {
   try {
     await requirePermission("ai.view");
     const body = await req.json();
 
+    if (body.action === "chat") {
+      if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+        return NextResponse.json({ success: false, error: "لیست پیام‌های گفتگو الزامی است." }, { status: 400 });
+      }
+      const chatRes = await chatWithAI(body.messages, body.projectId);
+      return NextResponse.json({ success: true, ...chatRes });
+    }
+
+    // Default: Analysis / Question
     if (!body.question) {
       return NextResponse.json({ success: false, error: "متن سوال الزامی است." }, { status: 400 });
     }

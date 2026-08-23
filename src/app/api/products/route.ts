@@ -30,6 +30,36 @@ export async function POST(req: Request) {
     const body = await req.json();
     await requirePermission(body?.action === "update_project_price" ? "projects.price.manage" : "products.create");
 
+    // Handle stock adjustment
+    if (body.action === "adjust_stock") {
+      const { productId, newQuantity, reason } = body;
+      if (!productId || newQuantity === undefined) {
+        return NextResponse.json({ success: false, error: "شناسه محصول و مقدار موجودی الزامی است." }, { status: 400 });
+      }
+
+      const [prod] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+      if (!prod) return NextResponse.json({ success: false, error: "محصول یافت نشد." }, { status: 404 });
+
+      const currentStock = Number(prod.stockQuantity) || 0;
+      const targetStock = Number(newQuantity) || 0;
+      const diff = targetStock - currentStock;
+
+      const [updated] = await db
+        .update(products)
+        .set({ stockQuantity: targetStock.toString(), updatedAt: new Date() })
+        .where(eq(products.id, productId))
+        .returning();
+
+      await logAuditEvent("ADJUST_STOCK", "product", productId, {
+        previousStock: currentStock,
+        newStock: targetStock,
+        diff,
+        reason: reason || "تعدیل دستی انبار",
+      });
+
+      return NextResponse.json({ success: true, product: updated });
+    }
+
     // PROMPT FIX B: Handle project-specific price update strictly matching (projectId + productId)
     if (body.action === "update_project_price") {
       const { projectId, productId, customPrice } = body;

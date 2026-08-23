@@ -64,18 +64,22 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const body = await req.json();
 
+    const updateData: any = {
+      name: body.name,
+      code: body.code,
+      category: body.category,
+      unit: body.unit,
+      updatedAt: new Date(),
+    };
+
+    if (body.basePrice !== undefined) updateData.basePrice = body.basePrice.toString();
+    if (body.stockQuantity !== undefined) updateData.stockQuantity = body.stockQuantity.toString();
+    if (body.minStockQuantity !== undefined) updateData.minStockQuantity = body.minStockQuantity.toString();
+    if (body.status !== undefined) updateData.status = body.status;
+
     const [updated] = await db
       .update(products)
-      .set({
-        name: body.name,
-        code: body.code,
-        category: body.category,
-        unit: body.unit,
-        basePrice: body.basePrice !== undefined ? body.basePrice.toString() : undefined,
-        minStockQuantity: body.minStockQuantity !== undefined ? body.minStockQuantity.toString() : undefined,
-        status: body.status,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(products.id, id))
       .returning();
 

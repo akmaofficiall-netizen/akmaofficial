@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import { getDashboardKPIs } from "./reporting";
 import { getActiveAlerts } from "./alerts";
 import { db } from "@/db";
@@ -19,128 +20,56 @@ export interface AIAnalysisResult {
   } | null;
 }
 
-let cachedGeminiModels: { apiKey: string; models: string[]; expiresAt: number } | null = null;
+export interface ChatMessage {
+  role: "user" | "model" | "assistant";
+  content: string;
+}
 
-const PREFERRED_GEMINI_MODELS = [
+// Approved Gemini models from gemini-api skill with fallback order for free-tier resilience
+const CANDIDATE_GEMINI_MODELS = [
   "gemini-2.5-flash",
-  "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
-  "gemini-3.5-flash",
-  "gemini-3.6-flash",
+  "gemini-3.7-flash",
+  "gemini-flash-latest",
 ];
 
-function normalizeModelId(name?: string | null, baseModelId?: string | null): string | null {
-  const raw = baseModelId || name || null;
-  if (!raw) return null;
-  return raw.startsWith("models/") ? raw.slice("models/".length) : raw;
-}
-
-function modelScore(modelId: string): number {
-  const exact = PREFERRED_GEMINI_MODELS.indexOf(modelId);
-  if (exact >= 0) return 1000 - exact * 50;
-  const lower = modelId.toLowerCase();
-  if (/flash/i.test(lower)) {
-    let score = 500;
-    if (/lite/i.test(lower)) score += 50;
-    if (/\b2\.5/.test(lower)) score += 30;
-    if (/\b3\./.test(lower)) score += 10;
-    if (/preview|experimental|exp/i.test(lower)) score -= 40;
-    return score;
-  }
-  return 0;
-}
-
-async function discoverGeminiModels(apiKey: string): Promise<string[]> {
-  if (cachedGeminiModels && cachedGeminiModels.apiKey === apiKey && cachedGeminiModels.expiresAt > Date.now()) {
-    return cachedGeminiModels.models;
-  }
-
-  try {
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
-      {
-        method: "GET",
-        headers: { "x-goog-api-key": apiKey },
-        cache: "no-store",
-      }
-    );
-
-    if (response.ok) {
-      const bodyText = await response.text().catch(() => "");
-      const data = JSON.parse(bodyText);
-      const models = Array.isArray(data?.models) ? data.models : [];
-      const usable = models
-        .filter((m: any) => {
-          const actions = [
-            ...(Array.isArray(m?.supportedActions) ? m.supportedActions : []),
-            ...(Array.isArray(m?.supportedGenerationMethods) ? m.supportedGenerationMethods : []),
-          ].map((v: unknown) => String(v).toLowerCase());
-          return actions.includes("generatecontent");
-        })
-        .map((m: any) => normalizeModelId(m?.name, m?.baseModelId))
-        .filter((id: string | null): id is string => !!id)
-        .filter((id: string) => !/(embedding|vision|live|image|audio|tts|robotics|transcribe)/i.test(id));
-
-      const uniqueSorted: string[] = Array.from(new Set<string>([...PREFERRED_GEMINI_MODELS, ...usable])).sort(
-        (a: string, b: string) => modelScore(b) - modelScore(a) || a.localeCompare(b)
-      );
-
-      if (uniqueSorted.length) {
-        cachedGeminiModels = {
-          apiKey,
-          models: uniqueSorted,
-          expiresAt: Date.now() + 5 * 60 * 1000,
-        };
-        return uniqueSorted;
-      }
-    }
-  } catch {
-    // Graceful fallback if list models endpoint has permission or network limitations
-  }
-
-  return PREFERRED_GEMINI_MODELS;
-}
-
-function shouldRetryWithAnotherGeminiModel(status: number, detail: string): boolean {
-  const normalized = detail.toLowerCase();
-  if ([429, 500, 502, 503, 504].includes(status)) return true;
-  if (status === 400) {
-    return /(high demand|overload|overloaded|temporar|unavailable|not found|unsupported|responsemimetype|response mime|resource exhausted|rate limit)/i.test(normalized);
-  }
-  return /(high demand|overload|overloaded|temporar|unavailable|resource exhausted|rate limit)/i.test(normalized);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parseGeminiJson(text: string): Record<string, any> {
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  const parsed = JSON.parse(cleaned);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Gemini پاسخ JSON معتبری برنگرداند.");
-  }
-  return parsed as Record<string, any>;
-}
-
-/**
- * AI Assistant Context Builder & Gemini Decision Engine.
- *
- * The existing database field names openaiApiKey/openaiModel are intentionally
- * kept for backward compatibility with existing databases and settings APIs.
- * The legacy model column is kept only for database/API compatibility; the AI service never trusts or selects a model from Settings.
- */
-export async function queryAIAssistant(
-  question: string,
-  projectId?: string | null
-): Promise<AIAnalysisResult> {
+async function getGeminiApiKey(): Promise<string> {
   const [settings] = await db
     .select()
     .from(systemSettings)
     .where(eq(systemSettings.id, "main_config"))
     .limit(1);
 
-  const apiKey = process.env.GEMINI_API_KEY || settings?.openaiApiKey;
+  const key = process.env.GEMINI_API_KEY || settings?.openaiApiKey;
+  if (!key) {
+    throw new Error(
+      "کلید Gemini تنظیم نشده است. لطفاً مقدار GEMINI_API_KEY را در Environment Variables یا تنظیمات وارد نمایید."
+    );
+  }
+  return key;
+}
+
+function parseGeminiJson(text: string): Record<string, any> {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // If JSON parsing fails, construct a standard result
+  }
+  return { answer: text, facts: [], recommendations: [], assumptions: [] };
+}
+
+/**
+ * Deep Business Analysis Query
+ */
+export async function queryAIAssistant(
+  question: string,
+  projectId?: string | null
+): Promise<AIAnalysisResult> {
+  const apiKey = await getGeminiApiKey();
   const kpis = await getDashboardKPIs({ projectId });
   const activeAlerts = await getActiveAlerts(projectId);
   const projectContext = projectId ? await getProjectDashboard(projectId) : null;
@@ -170,122 +99,136 @@ export async function queryAIAssistant(
     "نرخ‌های بهای تمام شده بر اساس فرمول ساخت BOM و قیمت‌های خرید جاری محاسبه شده‌اند.",
   ];
 
-  if (!apiKey) {
-    throw new Error("کلید Gemini تنظیم نشده است. مقدار GEMINI_API_KEY را در Environment Variables سرور یا تنظیمات هوش مصنوعی وارد کنید.");
-  }
+  const systemInstruction = `شما مشاور ارشد و تحلیل‌گر هوشمند کسب‌وکار سیستم «حکمت آکما» هستید.
+پاسخ‌های شما باید کاربردی، دقیق، واقع‌بینانه و به زبان فارسی روان باشند.
+پاسخ را در قالب یک آبجکت JSON معتبر شامل کلیدهای زیر بازگردانید:
+{
+  "answer": "پاسخ کامل، تحلیلی و راهنمای تفصیلی به سوال کاربر",
+  "facts": ["فهرستی از حقایق کلیدی مستخرج از داده‌های دیتابیس"],
+  "recommendations": ["راهکارهای عملیاتی و راهبردی بهبود سود یا مدیریت"],
+  "assumptions": ["فرضیات مورد استفاده در تحلیل"],
+  "proposalAction": null
+}`;
 
-  const systemInstruction = `شما مشاور هوشمند سیستم مدیریت و حسابداری «حکمت آکما» هستید.
-وظیفه شما پاسخ دقیق، کاربردی و فارسی به سوال واقعی کاربر بر اساس داده‌های عملیاتی ارائه‌شده است.
-هر سوال را جداگانه تحلیل کن و هرگز پاسخ ثابت یا قالبی را صرفاً به این دلیل که داده‌های KPI مشابه هستند تکرار نکن.
-فقط از اطلاعات ارائه‌شده به عنوان واقعیت استفاده کن؛ اگر داده کافی برای نتیجه‌گیری وجود ندارد، صریحاً بگو چه چیزی کم است.
-هیچ عددی را بدون مبنا اختراع نکن.
-پیشنهادها باید مستقیماً به سوال کاربر مربوط باشند.
-پاسخ را فقط در قالب JSON معتبر برگردان و فیلد answer را همیشه با یک پاسخ آزاد و طبیعی به خود سؤال پر کن؛ حتی اگر سؤال خارج از KPIهای کسب‌وکار است، راهنمایی عمومی و مفید بده و هر جا داده واقعی سیستم لازم است صریحاً کمبود آن را بیان کن.
-proposalAction فقط وقتی ساخته شود که یک اقدام مشخص و قابل انجام از روی داده‌های موجود پیشنهاد می‌کنی؛ در غیر این صورت null باشد.`;
-
-  const alertContext = activeAlerts.slice(0, 20).map((alert: any) => ({
-    title: alert.title,
-    severity: alert.severity,
-    type: alert.type,
-    message: alert.message,
-    createdAt: alert.createdAt,
-  }));
-
-  const userPrompt = `پرسش کاربر:
+  const userPrompt = `پرسش یا موضوع تحلیل:
 ${question.trim()}
 
-داده‌های واقعی فعلی سیستم:
+داده‌های واقعی مالی و عملیاتی فعلی سیستم:
 ${facts.join("\n")}
 
-شاخص‌های عددی:
+شاخص‌های دقیق سیستم:
 ${JSON.stringify(calculatedMetrics)}
 
-اطلاعات پروژه جاری (در صورت انتخاب پروژه):
+اطلاعات پروژه منتخب:
 ${JSON.stringify(projectContext)}
 
-هشدارهای فعال (${activeAlerts.length} مورد، حداکثر ۲۰ مورد اول):
-${JSON.stringify(alertContext)}
+اعلان‌های مهم اخیر:
+${JSON.stringify(activeAlerts.slice(0, 10))}`;
 
-فرض‌های پایه:
-${assumptions.join("\n")}`;
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
 
-  const candidateModels = await discoverGeminiModels(apiKey);
   let lastError = "";
 
-  for (let index = 0; index < candidateModels.length; index += 1) {
-    const model = candidateModels[index];
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: systemInstruction }],
-          },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: userPrompt }],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-          },
-        }),
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.find(
-        (part: { text?: string }) => typeof part.text === "string"
-      )?.text;
-
-      if (!text) {
-        throw new Error(`Gemini با مدل ${model} پاسخ متنی معتبری برنگرداند.`);
-      }
-
-      const content = parseGeminiJson(text);
-
-      return {
-        answer: typeof content.answer === "string" ? content.answer : "پاسخ قابل اتکایی برای این پرسش تولید نشد.",
-        facts: Array.isArray(content.facts) ? content.facts : facts,
-        calculatedMetrics,
-        assumptions: Array.isArray(content.assumptions) ? content.assumptions : assumptions,
-        recommendations: Array.isArray(content.recommendations) ? content.recommendations : [],
-        proposalAction:
-          content.proposalAction && typeof content.proposalAction === "object"
-            ? content.proposalAction
-            : null,
-      };
-    }
-
-    const errorBody = await response.text().catch(() => "");
-    let detail = errorBody;
+  for (const model of CANDIDATE_GEMINI_MODELS) {
     try {
-      const parsed = JSON.parse(errorBody);
-      detail = parsed?.error?.message || errorBody;
-    } catch {
-      // Keep raw response when Gemini does not return JSON.
+      const response = await ai.models.generateContent({
+        model,
+        contents: userPrompt,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+        },
+      });
+
+      const responseText = response.text;
+      if (responseText) {
+        const content = parseGeminiJson(responseText);
+        return {
+          answer: typeof content.answer === "string" ? content.answer : responseText,
+          facts: Array.isArray(content.facts) && content.facts.length ? content.facts : facts,
+          calculatedMetrics,
+          assumptions: Array.isArray(content.assumptions) && content.assumptions.length ? content.assumptions : assumptions,
+          recommendations: Array.isArray(content.recommendations) ? content.recommendations : [],
+          proposalAction: content.proposalAction && typeof content.proposalAction === "object" ? content.proposalAction : null,
+        };
+      }
+    } catch (err: any) {
+      lastError = `Model ${model}: ${err.message || String(err)}`;
+      console.warn(`Gemini fallback from ${model}:`, err.message);
+      // Try next lighter model automatically (e.g. flash-lite if flash hits free limit)
     }
-
-    lastError = `مدل ${model} (${response.status}): ${detail}`;
-    console.warn("Gemini model request failed:", lastError);
-
-    if (!shouldRetryWithAnotherGeminiModel(response.status, detail) || index === candidateModels.length - 1) {
-      break;
-    }
-
-    // Give transient capacity/rate-limit failures a brief pause before trying the next model.
-    await sleep(Math.min(1500, 250 * (index + 1)));
   }
 
-  // Force fresh model discovery after transient failures so the next request does not keep a stale list.
-  cachedGeminiModels = null;
-  throw new Error(`هیچ‌کدام از مدل‌های قابل‌استفاده Gemini پاسخ ندادند. آخرین خطا: ${lastError}`);
+  // If all SDK calls failed, throw informative error with solution hint
+  throw new Error(`خطا در ارتباط با هوش مصنوعی جمنای. آخرین پیغام: ${lastError}`);
+}
 
+/**
+ * Direct Interactive Conversational Chat with AI
+ */
+export async function chatWithAI(
+  messages: ChatMessage[],
+  projectId?: string | null
+): Promise<{ reply: string; modelUsed: string }> {
+  const apiKey = await getGeminiApiKey();
+  const kpis = await getDashboardKPIs({ projectId });
+  const activeAlerts = await getActiveAlerts(projectId);
+
+  const contextSummary = `شما دستیار هوش مصنوعی و همکار هوشمند سیستم مدیریت و حسابداری حکمت آکما هستید. 
+اطلاعات زنده سیستم جهت پاسخ به سوالات احتمالی کاربر:
+- فروش کل: ${kpis.totalSales.toLocaleString("fa-IR")} تومان
+- حاشیه سود خالص: ${kpis.netMarginPercent}%
+- مطالبات کل: ${kpis.totalReceivable.toLocaleString("fa-IR")} تومان
+- نقدینگی و بانک: ${kpis.totalLiquidity.toLocaleString("fa-IR")} تومان
+- تعداد اعلانات فعال: ${activeAlerts.length}
+
+وظیفه شما گفتگو، پاسخ به سوالات تجاری، حسابداری، فروش، راهنمایی پرسنل و مشاوره است. زبان پاسخ فارسی است.`;
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+
+  // Prepare contents format for Gemini
+  // Combine historical messages into prompt format
+  const lastUserMsg = messages[messages.length - 1]?.content || "سلام";
+  const conversationHistory = messages.slice(0, -1).map((m) => `${m.role === "user" ? "کاربر" : "هوش مصنوعی"}: ${m.content}`).join("\n");
+  const fullPrompt = `${conversationHistory ? `تاریخچه گفتگو:\n${conversationHistory}\n\n` : ""}پیام کاربر: ${lastUserMsg}`;
+
+  let lastError = "";
+
+  for (const model of CANDIDATE_GEMINI_MODELS) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: fullPrompt,
+        config: {
+          systemInstruction: contextSummary,
+        },
+      });
+
+      if (response.text) {
+        return {
+          reply: response.text,
+          modelUsed: model,
+        };
+      }
+    } catch (err: any) {
+      lastError = `Model ${model}: ${err.message || String(err)}`;
+      console.warn(`Chat Gemini fallback from ${model}:`, err.message);
+    }
+  }
+
+  throw new Error(`پاسخی از هوش مصنوعی دریافت نشد. خطا: ${lastError}`);
 }

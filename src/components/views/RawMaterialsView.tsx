@@ -34,8 +34,6 @@ export const RawMaterialsView: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [supplierModal, setSupplierModal] = useState<any | null>(null);
-  const [supplierForm, setSupplierForm] = useState({ code:"", name:"", contactPerson:"", mobile:"", phone:"", email:"", address:"", city:"تهران", notes:"" });
 
   // Form fields for Add/Edit
   const [formData, setFormData] = useState({
@@ -77,9 +75,6 @@ export const RawMaterialsView: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
-
-  const openSupplierModal = (supplier:any=null) => { setSupplierModal(supplier); setSupplierForm({ code:supplier?.code || `SUP-${Math.floor(100+Math.random()*900)}`, name:supplier?.name||"", contactPerson:supplier?.contactPerson||"", mobile:supplier?.mobile||"", phone:supplier?.phone||"", email:supplier?.email||"", address:supplier?.address||"", city:supplier?.city||"تهران", notes:supplier?.notes||"" }); };
-  const saveSupplier = async (e:React.FormEvent) => { e.preventDefault(); setSaving(true); try { const res=await fetch(supplierModal?.id?`/api/suppliers/${supplierModal.id}`:"/api/suppliers",{method:supplierModal?.id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(supplierForm)}).then(r=>r.json()); if(!res.success) throw new Error(res.error||"خطا در ذخیره تامین‌کننده"); setSupplierModal(null); fetchData(); } catch(e:any){ setErrorMessage(e.message); } finally{ setSaving(false); } };
 
   const openAddModal = () => {
     setFormData({
@@ -247,11 +242,6 @@ export const RawMaterialsView: React.FC = () => {
             افزودن ماده اولیه جدید
           </button>
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-        <div className="flex items-center justify-between"><div><h3 className="font-bold text-white">مدیریت تأمین‌کنندگان</h3><p className="text-[11px] text-slate-500 mt-1">ثبت و ویرایش اطلاعات تأمین‌کنندگان برای خرید و مواد اولیه</p></div><button onClick={()=>openSupplierModal()} className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white">+ افزودن تأمین‌کننده</button></div>
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-2">{suppliers.map(s=><div key={s.id} className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex items-center justify-between"><div><b className="text-sm text-white">{s.name}</b><div className="text-[10px] text-slate-500 mt-1">{s.mobile} · {s.city||"-"}</div></div><button onClick={()=>openSupplierModal(s)} className="rounded-lg border border-slate-700 px-2 py-1 text-[10px] text-cyan-300">ویرایش</button></div>)}</div>
       </div>
 
       {/* Filter Bar */}
@@ -726,8 +716,6 @@ export const RawMaterialsView: React.FC = () => {
           </div>
         </div>
       )}
-      {supplierModal && <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4"><form onSubmit={saveSupplier} className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-6 space-y-4"><div className="flex justify-between"><h3 className="font-bold">{supplierModal?.id?"ویرایش تأمین‌کننده":"تأمین‌کننده جدید"}</h3><button type="button" onClick={()=>setSupplierModal(null)}><X className="h-5 w-5"/></button></div><div className="grid md:grid-cols-2 gap-3">{[["code","کد"],["name","نام"],["contactPerson","مسئول"],["mobile","موبایل"],["phone","تلفن"],["email","ایمیل"],["city","شهر"],["address","آدرس"]].map(([k,l])=><input key={k} required={k==="name"||k==="mobile"} placeholder={l} value={(supplierForm as any)[k]} onChange={e=>setSupplierForm({...supplierForm,[k]:e.target.value})} className="rounded-xl border border-slate-800 bg-slate-900 p-2.5 text-white"/>)}</div><textarea value={supplierForm.notes} onChange={e=>setSupplierForm({...supplierForm,notes:e.target.value})} placeholder="یادداشت" className="w-full rounded-xl border border-slate-800 bg-slate-900 p-3 text-white"/><div className="flex justify-end gap-2"><button type="button" onClick={()=>setSupplierModal(null)} className="rounded-xl border border-slate-700 px-4 py-2">انصراف</button><button disabled={saving} className="rounded-xl bg-cyan-600 px-4 py-2 font-bold">ذخیره</button></div></form></div>}
-
     </div>
   );
 };

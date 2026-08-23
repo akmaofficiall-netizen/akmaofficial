@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, ShieldCheck, UserCheck, Calculator, KeyRound, User } from "lucide-react";
+import { LogIn, ShieldCheck, UserCheck, Calculator, KeyRound, User, Sparkles } from "lucide-react";
 
 export default function EmployeeLoginPage() {
   const router = useRouter();
@@ -39,8 +39,6 @@ export default function EmployeeLoginPage() {
 
       if (roleCode === "admin" || roleCode === "manager") {
         router.push("/");
-      } else if (roleCode === "accountant") {
-        router.push("/employee-dashboard?role=accountant");
       } else {
         router.push("/employee-dashboard");
       }
@@ -61,10 +59,10 @@ export default function EmployeeLoginPage() {
       <div className="w-full max-w-md space-y-6">
         {/* Logo / Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-400 shadow-xl shadow-purple-900/30 mb-2">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 text-white shadow-xl shadow-purple-900/30 mb-2">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">سامانه جامع مدیریت و فروش آکما</h1>
+          <h1 className="text-2xl font-black text-white tracking-tight">سامانه جامع مدیریت حکمت آکما</h1>
           <p className="text-xs text-slate-400">
             ورود اختصاصی مدیران، ویزیتورها و حسابداران سیستم
           </p>
@@ -84,7 +82,7 @@ export default function EmployeeLoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="مثال: akmaadmin یا 0912..."
+              placeholder="مثال: akmaadmin یا visitor1 یا accountant1"
               className="w-full rounded-xl bg-slate-950 border border-slate-800 p-3 text-xs text-white placeholder-slate-500 focus:border-purple-500 outline-none font-mono"
             />
           </div>
@@ -119,19 +117,35 @@ export default function EmployeeLoginPage() {
           </button>
         </form>
 
-        {/* Quick Demo Access Helpers */}
+        {/* Quick Role-based Demo Access */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 space-y-2.5">
           <p className="text-[11px] text-slate-400 text-center font-medium">
-            دسترسی سریع مدیر سیستم:
+            ورود سریع بر اساس نقش کاربری:
           </p>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => handleLogin("akmaadmin", "AkmaAdmin@2026")}
-              className="flex items-center justify-center gap-2 rounded-xl bg-slate-800/90 border border-slate-700 p-2.5 text-xs text-purple-300 hover:bg-purple-950/40 hover:border-purple-500/40 transition"
+              className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 border border-slate-700 p-2.5 text-xs text-purple-300 hover:bg-purple-950/40 hover:border-purple-500/40 transition"
             >
-              <ShieldCheck className="h-4 w-4" />
-              <span>ورود مستقیم مدیر سیستم (مدیریت کل)</span>
+              <ShieldCheck className="h-4 w-4 text-purple-400" />
+              <span className="font-bold">ورود مدیر کل</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLogin("visitor1", "Visitor@123")}
+              className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 border border-slate-700 p-2.5 text-xs text-cyan-300 hover:bg-cyan-950/40 hover:border-cyan-500/40 transition"
+            >
+              <UserCheck className="h-4 w-4 text-cyan-400" />
+              <span className="font-bold">ورود ویزیتور</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleLogin("accountant1", "Accountant@123")}
+              className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 border border-slate-700 p-2.5 text-xs text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/40 transition"
+            >
+              <Calculator className="h-4 w-4 text-emerald-400" />
+              <span className="font-bold">ورود حسابدار</span>
             </button>
           </div>
         </div>
@@ -139,4 +153,3 @@ export default function EmployeeLoginPage() {
     </main>
   );
 }
-
