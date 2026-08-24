@@ -186,11 +186,31 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                   onClick={() => {
                     setSearchResults([]);
                     setSearchQuery("");
-                    if (item.type === "raw_material") setActiveTab("raw_materials");
-                    else if (item.type === "invoice") setActiveTab("invoices");
-                    else if (item.type === "customer") setActiveTab("customers");
-                    else if (item.type === "product") setActiveTab("products");
-                    else if (item.type === "project") setActiveTab("dashboard");
+                    if (item.type === "employee") {
+                      setActiveTab("employees");
+                    } else if (item.type === "raw_material") {
+                      setActiveTab("raw_materials");
+                    } else if (item.type === "invoice") {
+                      setActiveTab("invoices");
+                    } else if (item.type === "customer") {
+                      setActiveTab("customers");
+                    } else if (item.type === "product") {
+                      setActiveTab("products");
+                    } else if (item.type === "supplier") {
+                      setActiveTab("purchases");
+                    } else if (item.type === "project") {
+                      setSelectedProjectId(item.id);
+                      setActiveTab("projects");
+                    }
+
+                    // Dispatch global event so sub-views can highlight or open item details
+                    setTimeout(() => {
+                      window.dispatchEvent(
+                        new CustomEvent("akma:navigate-item", {
+                          detail: { type: item.type, id: item.id, item },
+                        })
+                      );
+                    }, 50);
                   }}
                   className="flex items-center justify-between rounded-xl p-2 hover:bg-slate-800 cursor-pointer text-xs"
                 >

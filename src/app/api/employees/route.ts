@@ -48,6 +48,7 @@ export async function POST(req: Request) {
         cooperationType: body.cooperationType || body.role || "visitor",
         role: body.role || "visitor",
         commissionRatePercent: body.commissionRatePercent ? body.commissionRatePercent.toString() : "5.00",
+        commissionBase: body.commissionBase || "sales_total",
         notes: body.notes || null,
         status: body.status || "active",
         offboardingStage: "active",

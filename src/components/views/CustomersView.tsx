@@ -76,6 +76,27 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
     fetchData();
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    const handleNav = (ev: any) => {
+      const data = ev.detail;
+      if (data && data.type === "customer" && data.id) {
+        setSearchTerm(data.item?.title || data.item?.code || "");
+        const found = customers.find((c) => c.id === data.id);
+        if (found) {
+          setViewingProfile(found);
+        } else {
+          fetch(`/api/customers/${data.id}`)
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.success && res.customer) setViewingProfile(res.customer);
+            });
+        }
+      }
+    };
+    window.addEventListener("akma:navigate-item", handleNav);
+    return () => window.removeEventListener("akma:navigate-item", handleNav);
+  }, [customers]);
+
   const openAddModal = (customer: any = null) => {
     if (customer) {
       setEditingCustomer(customer);

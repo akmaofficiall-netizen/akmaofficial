@@ -205,18 +205,36 @@ export async function createInvoice(input: CreateInvoiceInput) {
         });
         const rule = eligible[0];
         const rate = rule ? Number(rule.rateValue) : Number(emp.commissionRatePercent) || 5;
-        const base = item.lineTotal;
-        const amount = rule?.ruleType === "fixed" ? rate : Math.round(base * rate / 100);
+        const commissionBase = rule?.commissionBase || (emp as any).commissionBase || "sales_total";
+        const base = commissionBase === "net_profit" ? Math.max(0, item.lineProfit) : item.lineTotal;
+        const amount = rule?.ruleType === "fixed" ? rate : Math.round((base * rate) / 100);
         totalCommission += amount;
-        snapshots.push({ productId: item.productId, ruleId: rule?.id || null, ruleType: rule?.ruleType || "employee_default", rateValue: rate, baseAmount: base, commissionAmount: amount });
+        snapshots.push({
+          productId: item.productId,
+          ruleId: rule?.id || null,
+          ruleType: rule?.ruleType || "employee_default",
+          commissionBase,
+          rateValue: rate,
+          baseAmount: base,
+          lineTotal: item.lineTotal,
+          lineProfit: item.lineProfit,
+          commissionAmount: amount,
+        });
       }
       if (totalCommission > 0) {
+        const primaryBase = (emp as any).commissionBase || "sales_total";
+        const calculatedBaseTotal = primaryBase === "net_profit" ? grossProfitTotal : grandTotal;
         await db.insert(commissionLedger).values({
-          employeeId: input.employeeId, invoiceId: createdInvoice.id, projectId: input.projectId || null,
-          ruleSnapshot: { invoiceNumber: invoiceNum, items: snapshots },
-          baseAmount: grandTotal.toString(), commissionAmount: totalCommission.toString(),
-          status: "pending", commissionType: "employee", recipientEmployeeId: input.employeeId,
-          notes: `پورسانت فروش فاکتور #${invoiceNum}`,
+          employeeId: input.employeeId,
+          invoiceId: createdInvoice.id,
+          projectId: input.projectId || null,
+          ruleSnapshot: { invoiceNumber: invoiceNum, commissionBase: primaryBase, items: snapshots },
+          baseAmount: calculatedBaseTotal.toString(),
+          commissionAmount: totalCommission.toString(),
+          status: "pending",
+          commissionType: "employee",
+          recipientEmployeeId: input.employeeId,
+          notes: `پورسانت ${primaryBase === "net_profit" ? "بر اساس سود خالص" : "بر اساس مبلغ کل"} فاکتور #${invoiceNum}`,
         });
         await db.update(invoices).set({ commissionSnapshot: snapshots }).where(eq(invoices.id, createdInvoice.id));
       }

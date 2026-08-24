@@ -86,6 +86,7 @@ export const EmployeesView: React.FC = () => {
     role: "visitor",
     status: "active",
     commissionRatePercent: 5,
+    commissionBase: "sales_total",
     baseSalary: 0,
     startedAt: "",
     activityScope: "",
@@ -115,6 +116,27 @@ export const EmployeesView: React.FC = () => {
   useEffect(() => {
     load();
   }, [q, status]);
+
+  // Listen to search navigation
+  useEffect(() => {
+    const handleNav = (ev: any) => {
+      const data = ev.detail;
+      if (data && data.type === "employee" && data.id) {
+        const found = employees.find((x) => x.id === data.id);
+        if (found) {
+          open(found);
+        } else {
+          fetch(`/api/employees/${data.id}`)
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.success && res.employee) open(res.employee);
+            });
+        }
+      }
+    };
+    window.addEventListener("akma:navigate-item", handleNav);
+    return () => window.removeEventListener("akma:navigate-item", handleNav);
+  }, [employees]);
 
   const open = async (emp: any) => {
     setSelected(emp);
@@ -189,6 +211,7 @@ export const EmployeesView: React.FC = () => {
       role: selected.role || "visitor",
       status: selected.status || "active",
       commissionRatePercent: selected.commissionRatePercent || 0,
+      commissionBase: selected.commissionBase || "sales_total",
       baseSalary: selected.baseSalary || 0,
       activityScope: selected.activityScope || "",
     });
@@ -434,7 +457,7 @@ export const EmployeesView: React.FC = () => {
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-400 border-t border-slate-800 pt-3">
               <span>شماره تماس: <b className="text-slate-200 font-mono">{e.mobile}</b></span>
-              <span>پورسانت: <b className="text-emerald-400 font-bold">{Number(e.commissionRatePercent || 0)}%</b></span>
+              <span>پورسانت: <b className="text-emerald-400 font-bold">{Number(e.commissionRatePercent || 0)}%</b> <span className="text-[10px] text-slate-400 font-normal">({e.commissionBase === "net_profit" ? "سود خالص" : "کل فروش"})</span></span>
               <span>شروع همکاری: <b className="text-slate-300">{toJalaliDate(e.startedAt)}</b></span>
               <span>محدوده: <b className="text-slate-300">{e.activityScope || "عمومی"}</b></span>
             </div>
@@ -939,6 +962,18 @@ export const EmployeesView: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-slate-300 font-semibold mb-1">مبنای محاسبه پورسانت:</label>
+                <select
+                  value={form.commissionBase || "sales_total"}
+                  onChange={(e) => setForm({ ...form, commissionBase: e.target.value })}
+                  className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-2.5 text-white font-semibold"
+                >
+                  <option value="sales_total">مبلغ کل فروش فاکتور (پیش‌فرض)</option>
+                  <option value="net_profit">سود خالص فاکتور (فروش منهای بهای تمام شده)</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-slate-300 font-semibold mb-1">حقوق پایه ماهانه (تومان):</label>
                 <input
                   type="number"
@@ -1160,6 +1195,17 @@ export const EmployeesView: React.FC = () => {
                     onChange={(e) => setEditForm({ ...editForm, commissionRatePercent: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-xl bg-slate-900 border border-slate-700 p-2.5 text-white font-mono"
                   />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">مبنای محاسبه پورسانت:</label>
+                  <select
+                    value={editForm.commissionBase || "sales_total"}
+                    onChange={(e) => setEditForm({ ...editForm, commissionBase: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-700 p-2.5 text-white"
+                  >
+                    <option value="sales_total">مبلغ کل فروش فاکتور</option>
+                    <option value="net_profit">سود خالص فاکتور (فروش - بهای تمام شده)</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">حقوق پایه ماهیانه (تومان):</label>

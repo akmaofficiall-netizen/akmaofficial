@@ -887,6 +887,10 @@ export async function migrateDatabase() {
 
     ALTER TABLE commission_ledger ADD COLUMN IF NOT EXISTS recipient_employee_id UUID REFERENCES employees(id);
     ALTER TABLE commission_ledger ADD COLUMN IF NOT EXISTS commission_type TEXT DEFAULT 'employee';
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS commission_base TEXT DEFAULT 'sales_total';
+    ALTER TABLE commission_rules ADD COLUMN IF NOT EXISTS commission_base TEXT DEFAULT 'sales_total';
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS city TEXT DEFAULT 'تهران';
+    ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS payable_balance NUMERIC(15,2) DEFAULT 0;
 
     ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_snapshot JSONB;
     ALTER TABLE invoices ADD COLUMN IF NOT EXISTS price_snapshot JSONB;

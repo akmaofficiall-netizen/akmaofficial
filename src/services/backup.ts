@@ -127,3 +127,65 @@ export async function getBackupById(id: string) {
   const [record] = await db.select().from(schema.backups).where(eq(schema.backups.id, id)).limit(1);
   return record;
 }
+
+export async function restoreFullSystemBackup(dump: any) {
+  if (!dump || !dump.data || typeof dump.data !== "object") {
+    throw new Error("فرمت فایل پشتیبان نامعتبر است (ساختار data یا جداول یافت نشد).");
+  }
+
+  const { data } = dump;
+  const restoredStats: Record<string, number> = {};
+
+  // Wipe data in reverse topological order (children first)
+  const reverseTables = [...BACKUP_TABLES].reverse();
+
+  await db.transaction(async (tx: any) => {
+    // 1. Clean existing records in reverse order
+    for (const [name, table] of reverseTables) {
+      try {
+        await tx.delete(table as any);
+      } catch (e: any) {
+        console.warn(`Table wipe note on ${name}:`, e.message);
+      }
+    }
+
+    // 2. Insert records in forward order (parents first)
+    for (const [name, table] of BACKUP_TABLES) {
+      const rows = data[name];
+      if (Array.isArray(rows) && rows.length > 0) {
+        const chunkSize = 50;
+        let count = 0;
+        for (let i = 0; i < rows.length; i += chunkSize) {
+          const chunk = rows.slice(i, i + chunkSize);
+          await tx.insert(table as any).values(chunk).onConflictDoNothing();
+          count += chunk.length;
+        }
+        restoredStats[name] = count;
+      } else {
+        restoredStats[name] = 0;
+      }
+    }
+  });
+
+  try {
+    await logAuditEvent("RESTORE", "system", "all", {
+      timestamp: new Date().toISOString(),
+      restoredTables: Object.keys(restoredStats).length,
+    });
+  } catch (e) {
+    console.warn("Audit log error on restore:", e);
+  }
+
+  return { success: true, restoredStats };
+}
+
+export async function restoreBackupById(id: string) {
+  const backup = await getBackupById(id);
+  if (!backup) {
+    throw new Error("پشتیبان مورد نظر یافت نشد.");
+  }
+  if (!backup.backupData) {
+    throw new Error("داده‌های پشتیبان در رکورد این فایل موجود نمی‌باشد.");
+  }
+  return restoreFullSystemBackup(backup.backupData);
+}

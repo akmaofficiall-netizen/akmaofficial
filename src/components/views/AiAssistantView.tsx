@@ -13,7 +13,9 @@ import {
   User,
   Zap,
   Trash2,
-  HelpCircle
+  CheckCircle2,
+  Play,
+  TrendingUp,
 } from "lucide-react";
 
 interface AiAssistantViewProps {
@@ -25,6 +27,13 @@ interface ChatMsg {
   content: string;
   timestamp?: string;
   modelUsed?: string;
+  actionProposal?: {
+    actionType: string;
+    description: string;
+    parameters: Record<string, any>;
+  } | null;
+  actionExecuted?: boolean;
+  executionResultText?: string;
 }
 
 export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjectId }) => {
@@ -34,12 +43,14 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "model",
-      content: "سلام! من دستیار هوش مصنوعی حکمت آکما هستم. آماده‌ام به سوالات شما درباره فروش، حسابداری، فرمول‌های تولید، وضعیت مشتریان یا تحلیل عملکرد پاسخ دهم. چطور می‌توانم کمکتان کنم؟",
+      content:
+        "سلام! من دستیار هوش مصنوعی حکمت آکما هستم. می‌توانید علاوه بر تحلیل و سوالات مالی، دستور تغییر اطلاعات سایت را نیز بدهید؛ مثلاً: «تورم ۱۰ درصد داشتیم، اعمال کن روی قیمت محصولات» یا «پورسانت ویزیتورها را به ۶ درصد بر اساس سود خالص تغییر بده».",
       timestamp: new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [executingActionIdx, setExecutingActionIdx] = useState<number | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // Analysis State
@@ -74,7 +85,10 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "chat",
-          messages: newHistory.map((m) => ({ role: m.role === "assistant" ? "model" : m.role, content: m.content })),
+          messages: newHistory.map((m) => ({
+            role: m.role === "assistant" ? "model" : m.role,
+            content: m.content,
+          })),
           projectId: selectedProjectId,
         }),
       }).then((r) => r.json());
@@ -86,6 +100,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
             role: "model",
             content: res.reply,
             modelUsed: res.modelUsed,
+            actionProposal: res.actionProposal || null,
             timestamp: new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
           },
         ]);
@@ -110,6 +125,40 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
       ]);
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const handleExecuteActionProposal = async (msgIndex: number, actionProposal: any) => {
+    setExecutingActionIdx(msgIndex);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "execute_action",
+          actionProposal,
+        }),
+      }).then((r) => r.json());
+
+      if (res.success) {
+        setMessages((prev) =>
+          prev.map((m, idx) =>
+            idx === msgIndex
+              ? {
+                  ...m,
+                  actionExecuted: true,
+                  executionResultText: res.message || "عملیات با موفقیت در دیتابیس اعمال گردید.",
+                }
+              : m
+          )
+        );
+      } else {
+        alert(res.error || "خطا در اعمال عملیات");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در ارتباط با سرور");
+    } finally {
+      setExecutingActionIdx(null);
     }
   };
 
@@ -142,10 +191,11 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
   };
 
   const samplePrompts = [
+    "تورم ۱۰ درصد داشتیم، اعمال کن روی قیمت محصولات",
+    "هزینه خرید مواد اولیه را ۸ درصد افزایش بده به علت تورم",
+    "پورسانت ویزیتورها را به ۶ درصد بر اساس سود خالص تنظیم کن",
     "وضعیت نقدینگی و مطالبات دریافتنی کسب‌وکار چطور است؟",
     "کدام مشتریان بدهی معوق دارند و راهکار پیگیری چیست؟",
-    "راهکار افزایش حاشیه سود ناخالص فروش در پروژه‌های جاری",
-    "محاسبه و کنترل هزینه‌های تولید و بهای تمام شده کالاها",
   ];
 
   return (
@@ -158,7 +208,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
             مرکز هوش مصنوعی حکمت آکما (Gemini AI Core)
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            دستیار هوشمند با قابلیت چت زنده، تشخیص خودکار مدل و مدیریت محدودیت‌های API
+            دستیار هوشمند با قابلیت چت زنده، تحلیل داده‌ها و تغییر مستقیم اطلاعات و نرخ‌ها در سیستم
           </p>
         </div>
 
@@ -173,7 +223,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
             }`}
           >
             <MessageSquare className="h-3.5 w-3.5" />
-            چت مستقیم با هوش مصنوعی
+            چت و اعمال دستورات در دیتابیس
           </button>
           <button
             onClick={() => setActiveMode("analysis")}
@@ -199,15 +249,15 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
-              <span className="text-xs font-bold text-white">اتصال زنده Gemini Flash / Lite</span>
-              <span className="text-[10px] text-slate-500 mr-2">(تنظیم خودکار لود و پایداری رایگان)</span>
+              <span className="text-xs font-bold text-white">اتصال زنده هوش مصنوعی Gemini</span>
+              <span className="text-[10px] text-emerald-400 font-mono">قابلیت خواندن و تغییر زنده اطلاعات</span>
             </div>
             <button
               onClick={() =>
                 setMessages([
                   {
                     role: "model",
-                    content: "گفتگوی جدید آغاز شد. چه کمکی از دست من برمی‌آید؟",
+                    content: "گفتگوی جدید آغاز شد. چه دستوری دارید؟",
                     timestamp: new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
                   },
                 ])
@@ -224,10 +274,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
             {messages.map((msg, i) => {
               const isUser = msg.role === "user";
               return (
-                <div
-                  key={i}
-                  className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
-                >
+                <div key={i} className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
                       isUser
@@ -238,14 +285,52 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
                     {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                   </div>
                   <div
-                    className={`max-w-[80%] rounded-2xl p-3.5 text-xs leading-6 space-y-1 shadow-sm ${
+                    className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-6 space-y-2 shadow-sm ${
                       isUser
                         ? "bg-blue-600 text-white rounded-tr-none"
                         : "bg-slate-950 border border-slate-800 text-slate-200 rounded-tl-none"
                     }`}
                   >
                     <p className="whitespace-pre-wrap">{msg.content}</p>
-                    <div className="flex items-center justify-between gap-2 pt-1 text-[9px] opacity-70">
+
+                    {/* Action Proposal Interactive Card */}
+                    {msg.actionProposal && (
+                      <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 text-xs space-y-2.5">
+                        <div className="flex items-center gap-2 text-amber-300 font-bold">
+                          <TrendingUp className="h-4 w-4" />
+                          <span>پیشنهاد اعمال تغییر در دیتابیس سیستم:</span>
+                        </div>
+                        <p className="text-slate-300">{msg.actionProposal.description}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                          <span>عملیات: {msg.actionProposal.actionType}</span>
+                          <span>|</span>
+                          <span>پارامترها: {JSON.stringify(msg.actionProposal.parameters)}</span>
+                        </div>
+
+                        {msg.actionExecuted ? (
+                          <div className="flex items-center gap-2 text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3 py-1.5 rounded-lg font-bold">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span>{msg.executionResultText || "با موفقیت اعمال گردید."}</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={executingActionIdx === i}
+                            onClick={() => handleExecuteActionProposal(i, msg.actionProposal)}
+                            className="flex items-center gap-2 rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md hover:bg-amber-500 transition-all disabled:opacity-50"
+                          >
+                            {executingActionIdx === i ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                            تایید و اعمال مستقیم روی اطلاعات سیستم
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 pt-1 text-[9px] opacity-70 border-t border-slate-800/50">
                       <span>{msg.timestamp}</span>
                       {msg.modelUsed && <span className="font-mono">{msg.modelUsed}</span>}
                     </div>
@@ -260,7 +345,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
                   <RefreshCw className="h-4 w-4 animate-spin text-purple-400" />
                 </div>
                 <div className="rounded-2xl rounded-tl-none bg-slate-950 border border-slate-800 p-3.5 text-xs text-slate-400 flex items-center gap-2">
-                  <span className="inline-block animate-pulse">هوش مصنوعی در حال تحلیل و آماده‌سازی پاسخ است...</span>
+                  <span className="inline-block animate-pulse">هوش مصنوعی در حال تحلیل و پردازش درخواست شماست...</span>
                 </div>
               </div>
             )}
@@ -271,7 +356,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
           <div className="border-t border-slate-800/80 px-4 py-2 bg-slate-950/40 flex items-center gap-2 overflow-x-auto text-[11px] no-scrollbar">
             <span className="text-slate-500 shrink-0 flex items-center gap-1">
               <Zap className="h-3 w-3 text-amber-400" />
-              پیشنهادات:
+              دستورات سریع:
             </span>
             {samplePrompts.map((p, idx) => (
               <button
@@ -295,7 +380,7 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({ selectedProjec
             >
               <input
                 type="text"
-                placeholder="پیام یا پرسش خود را اینجا بنویسید (مثلاً: وضعیت تولید قطعات چطور است؟)..."
+                placeholder="دستور یا پرسش خود را بنویسید (مثلاً: قیمت محصولات را ۱۰ درصد به خاطر تورم زیاد کن)..."
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 disabled={chatLoading}

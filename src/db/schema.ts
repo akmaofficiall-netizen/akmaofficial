@@ -109,6 +109,7 @@ export const employees = pgTable("employees", {
   managerId: uuid("manager_id"),
   baseSalary: numeric("base_salary", { precision: 15, scale: 2 }).default("0"),
   commissionRatePercent: numeric("commission_rate_percent", { precision: 5, scale: 2 }).default("5"),
+  commissionBase: text("commission_base").default("sales_total").notNull(), // sales_total, net_profit
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -478,6 +479,7 @@ export const commissionRules = pgTable("commission_rules", {
   employeeId: uuid("employee_id").references(() => employees.id),
   ruleType: text("rule_type").default("percentage").notNull(), // percentage, fixed, receipt_percentage
   rateValue: numeric("rate_value", { precision: 15, scale: 2 }).notNull(),
+  commissionBase: text("commission_base").default("sales_total").notNull(), // sales_total, net_profit
   effectiveStartDate: timestamp("effective_start_date"),
   effectiveEndDate: timestamp("effective_end_date"),
   isActive: boolean("is_active").default(true),

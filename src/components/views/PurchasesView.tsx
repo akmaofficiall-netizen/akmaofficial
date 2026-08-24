@@ -77,6 +77,31 @@ export const PurchasesView: React.FC = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const handleNav = (ev: any) => {
+      const data = ev.detail;
+      if (data && data.type === "supplier" && data.id) {
+        setActiveSubTab("suppliers");
+        const found = suppliers.find((s) => s.id === data.id);
+        if (found) {
+          openSupplierModal(found);
+        } else {
+          fetch("/api/suppliers")
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.success && res.suppliers) {
+                setSuppliers(res.suppliers);
+                const s = res.suppliers.find((x: any) => x.id === data.id);
+                if (s) openSupplierModal(s);
+              }
+            });
+        }
+      }
+    };
+    window.addEventListener("akma:navigate-item", handleNav);
+    return () => window.removeEventListener("akma:navigate-item", handleNav);
+  }, [suppliers]);
+
   const openPurchaseModal = () => {
     setPurchaseForm({
       supplierId: suppliers[0]?.id || "",

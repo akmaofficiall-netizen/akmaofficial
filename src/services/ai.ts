@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { systemSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getProjectDashboard } from "@/services/partner";
+import { AIActionPayload, executeAIAction } from "./aiDataModifier";
 
 export interface AIAnalysisResult {
   answer: string;
@@ -23,6 +24,7 @@ export interface AIAnalysisResult {
 export interface ChatMessage {
   role: "user" | "model" | "assistant";
   content: string;
+  actionProposal?: AIActionPayload | null;
 }
 
 // Approved Gemini models from gemini-api skill with fallback order for free-tier resilience
@@ -57,7 +59,7 @@ function parseGeminiJson(text: string): Record<string, any> {
       return parsed;
     }
   } catch {
-    // If JSON parsing fails, construct a standard result
+    // If JSON parsing fails, return null
   }
   return { answer: text, facts: [], recommendations: [], assumptions: [] };
 }
@@ -162,34 +164,51 @@ ${JSON.stringify(activeAlerts.slice(0, 10))}`;
     } catch (err: any) {
       lastError = `Model ${model}: ${err.message || String(err)}`;
       console.warn(`Gemini fallback from ${model}:`, err.message);
-      // Try next lighter model automatically (e.g. flash-lite if flash hits free limit)
     }
   }
 
-  // If all SDK calls failed, throw informative error with solution hint
   throw new Error(`خطا در ارتباط با هوش مصنوعی جمنای. آخرین پیغام: ${lastError}`);
 }
 
 /**
- * Direct Interactive Conversational Chat with AI
+ * Direct Interactive Conversational Chat with AI with Data Modification Capability
  */
 export async function chatWithAI(
   messages: ChatMessage[],
   projectId?: string | null
-): Promise<{ reply: string; modelUsed: string }> {
+): Promise<{ reply: string; modelUsed: string; actionProposal?: AIActionPayload | null }> {
   const apiKey = await getGeminiApiKey();
   const kpis = await getDashboardKPIs({ projectId });
   const activeAlerts = await getActiveAlerts(projectId);
 
-  const contextSummary = `شما دستیار هوش مصنوعی و همکار هوشمند سیستم مدیریت و حسابداری حکمت آکما هستید. 
-اطلاعات زنده سیستم جهت پاسخ به سوالات احتمالی کاربر:
+  const contextSummary = `شما دستیار هوش مصنوعی هوشمند سیستم مدیریت، تولید و حسابداری حکمت آکما هستید.
+شما علاوه بر پاسخگویی به سوالات، توانایی اعمال تغییرات در اطلاعات سیستم (Data Modification) را دارید.
+
+عملیات‌های قابل انجام توسط شما در دیتابیس سیستم:
+1. "APPLY_INFLATION_PRODUCTS": تغییر قیمت فروش محصولات بر اساس درصد تورم یا درصد اعلامی (پارامتر: percent مثلاً 10 یا -5). مثال: "تورم 10 درصد داشتیم روی محصولات اعمال کن".
+2. "APPLY_INFLATION_RAW_MATERIALS": تغییر هزینه خرید مواد اولیه بر اساس درصد تورم (پارامتر: percent).
+3. "UPDATE_VISITOR_COMMISSIONS": تغییر درصد پورسانت ویزیتورها (پارامتر: percent و در صورت درخواست commissionBase با مقادیر "sales_total" یا "net_profit").
+4. "CREATE_PRODUCT": ایجاد محصول جدید (پارامترها: name, basePrice, category).
+5. "CREATE_CUSTOMER": ثبت مشتری جدید (پارامترها: name, mobile, city, storeName).
+
+اطلاعات زنده سیستم:
 - فروش کل: ${kpis.totalSales.toLocaleString("fa-IR")} تومان
 - حاشیه سود خالص: ${kpis.netMarginPercent}%
 - مطالبات کل: ${kpis.totalReceivable.toLocaleString("fa-IR")} تومان
 - نقدینگی و بانک: ${kpis.totalLiquidity.toLocaleString("fa-IR")} تومان
 - تعداد اعلانات فعال: ${activeAlerts.length}
 
-وظیفه شما گفتگو، پاسخ به سوالات تجاری، حسابداری، فروش، راهنمایی پرسنل و مشاوره است. زبان پاسخ فارسی است.`;
+قالب پاسخ دهی شما:
+پاسخ را همواره در ساختار JSON استاندارد زیر تولید کنید:
+{
+  "reply": "متن پاسخ فارسی محترمانه و دقیق به کاربر",
+  "actionProposal": null | {
+    "actionType": "APPLY_INFLATION_PRODUCTS" | "APPLY_INFLATION_RAW_MATERIALS" | "UPDATE_VISITOR_COMMISSIONS" | "CREATE_PRODUCT" | "CREATE_CUSTOMER",
+    "description": "توضیح کوتاه عملیاتی که انجام خواهد شد",
+    "parameters": { "percent": 10, ... }
+  }
+}
+اگر کاربر از شما خواست تغییری در سیستم یا قیمت‌ها یا تورم ایجاد کنید، حتماً actionProposal را با پارامترهای استخراج شده تکمیل کنید.`;
 
   const ai = new GoogleGenAI({
     apiKey,
@@ -200,10 +219,11 @@ export async function chatWithAI(
     },
   });
 
-  // Prepare contents format for Gemini
-  // Combine historical messages into prompt format
   const lastUserMsg = messages[messages.length - 1]?.content || "سلام";
-  const conversationHistory = messages.slice(0, -1).map((m) => `${m.role === "user" ? "کاربر" : "هوش مصنوعی"}: ${m.content}`).join("\n");
+  const conversationHistory = messages
+    .slice(0, -1)
+    .map((m) => `${m.role === "user" ? "کاربر" : "هوش مصنوعی"}: ${m.content}`)
+    .join("\n");
   const fullPrompt = `${conversationHistory ? `تاریخچه گفتگو:\n${conversationHistory}\n\n` : ""}پیام کاربر: ${lastUserMsg}`;
 
   let lastError = "";
@@ -215,13 +235,19 @@ export async function chatWithAI(
         contents: fullPrompt,
         config: {
           systemInstruction: contextSummary,
+          responseMimeType: "application/json",
         },
       });
 
       if (response.text) {
+        const parsed = parseGeminiJson(response.text);
+        const reply = parsed.reply || (typeof parsed.answer === "string" ? parsed.answer : response.text);
+        const actionProposal = parsed.actionProposal || null;
+
         return {
-          reply: response.text,
+          reply,
           modelUsed: model,
+          actionProposal,
         };
       }
     } catch (err: any) {
