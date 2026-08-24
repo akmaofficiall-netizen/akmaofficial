@@ -15,6 +15,9 @@ export const pool =
   globalForDb.__arenaNextJsPostgresqlPool ??
   new Pool({
     connectionString: databaseUrl || "postgres://postgres:postgres@127.0.0.1:5432/postgres",
+    ssl: databaseUrl && !databaseUrl.includes("127.0.0.1") && !databaseUrl.includes("localhost")
+      ? { rejectUnauthorized: false }
+      : undefined,
   });
 
 if (process.env.NODE_ENV !== "production") {

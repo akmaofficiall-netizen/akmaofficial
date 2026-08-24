@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import { auditLogs } from "@/db/schema";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function logAuditEvent(
   action: string,
   entityType: string,
@@ -9,12 +11,18 @@ export async function logAuditEvent(
   userName: string = "کاربر سیستم"
 ) {
   try {
+    const validEntityId = entityId && UUID_REGEX.test(entityId) ? entityId : null;
+    const finalDetails = { ...(details || {}) };
+    if (entityId && !validEntityId) {
+      finalDetails.rawEntityId = entityId;
+    }
+
     await db.insert(auditLogs).values({
       action,
       entityType,
-      entityId: entityId || null,
+      entityId: validEntityId,
       userName,
-      details: details || {},
+      details: finalDetails,
     });
   } catch (err) {
     console.error("Failed to write audit log:", err);

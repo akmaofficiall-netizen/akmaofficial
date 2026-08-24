@@ -198,6 +198,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                       setActiveTab("products");
                     } else if (item.type === "supplier") {
                       setActiveTab("purchases");
+                    } else if (item.type === "account") {
+                      setActiveTab("financial");
                     } else if (item.type === "project") {
                       setSelectedProjectId(item.id);
                       setActiveTab("projects");

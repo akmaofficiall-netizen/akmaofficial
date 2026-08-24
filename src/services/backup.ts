@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { logAuditEvent } from "./audit";
 
 const BACKUP_TABLES = [
@@ -128,6 +128,34 @@ export async function getBackupById(id: string) {
   return record;
 }
 
+function sanitizeRowForTable(table: any, row: Record<string, any>): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(row)) {
+    if (val === undefined) continue;
+
+    const col = table[key];
+    const isDateCol =
+      col &&
+      (col.dataType === "date" ||
+        col.columnType === "PgTimestamp" ||
+        col.columnType === "PgDate");
+
+    if (isDateCol) {
+      if (val === null || val === "") {
+        clean[key] = null;
+      } else if (val instanceof Date) {
+        clean[key] = val;
+      } else {
+        const parsed = new Date(val as string | number);
+        clean[key] = isNaN(parsed.getTime()) ? null : parsed;
+      }
+    } else {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
+
 export async function restoreFullSystemBackup(dump: any) {
   if (!dump || !dump.data || typeof dump.data !== "object") {
     throw new Error("فرمت فایل پشتیبان نامعتبر است (ساختار data یا جداول یافت نشد).");
@@ -136,36 +164,83 @@ export async function restoreFullSystemBackup(dump: any) {
   const { data } = dump;
   const restoredStats: Record<string, number> = {};
 
-  // Wipe data in reverse topological order (children first)
-  const reverseTables = [...BACKUP_TABLES].reverse();
+  const tableNames = [
+    "audit_logs",
+    "tasks",
+    "alerts",
+    "consignment_items",
+    "consignments",
+    "expenses",
+    "payroll_records",
+    "commission_ledger",
+    "commission_rules",
+    "payment_allocations",
+    "payments",
+    "accounts",
+    "invoice_items",
+    "invoices",
+    "production_batch_items",
+    "production_batches",
+    "purchase_items",
+    "purchases",
+    "inventory_ledger",
+    "warehouses",
+    "project_product_prices",
+    "product_recipes",
+    "products",
+    "raw_material_price_history",
+    "raw_materials",
+    "suppliers",
+    "project_targets",
+    "project_compensations",
+    "employee_project_assignments",
+    "employee_accounts",
+    "role_permissions",
+    "permissions",
+    "roles",
+    "customer_assignments",
+    "employee_project_memberships",
+    "employees",
+    "customer_health_logs",
+    "customer_project_memberships",
+    "customers",
+    "projects",
+    "system_settings",
+  ];
 
-  await db.transaction(async (tx: any) => {
-    // 1. Clean existing records in reverse order
+  // 1. Truncate all tables cleanly with CASCADE
+  try {
+    const truncateSql = `TRUNCATE ${tableNames.map((t) => `"${t}"`).join(", ")} CASCADE;`;
+    await db.execute(sql.raw(truncateSql));
+  } catch (e: any) {
+    console.warn("Truncate cascade warning, falling back to individual deletes:", e.message);
+    const reverseTables = [...BACKUP_TABLES].reverse();
     for (const [name, table] of reverseTables) {
       try {
-        await tx.delete(table as any);
-      } catch (e: any) {
-        console.warn(`Table wipe note on ${name}:`, e.message);
+        await db.delete(table as any);
+      } catch (err: any) {
+        console.warn(`Table wipe note on ${name}:`, err.message);
       }
     }
+  }
 
-    // 2. Insert records in forward order (parents first)
-    for (const [name, table] of BACKUP_TABLES) {
-      const rows = data[name];
-      if (Array.isArray(rows) && rows.length > 0) {
-        const chunkSize = 50;
-        let count = 0;
-        for (let i = 0; i < rows.length; i += chunkSize) {
-          const chunk = rows.slice(i, i + chunkSize);
-          await tx.insert(table as any).values(chunk).onConflictDoNothing();
-          count += chunk.length;
-        }
-        restoredStats[name] = count;
-      } else {
-        restoredStats[name] = 0;
+  // 2. Insert records in forward order (parents first)
+  for (const [name, table] of BACKUP_TABLES) {
+    const rows = data[name];
+    if (Array.isArray(rows) && rows.length > 0) {
+      const chunkSize = 50;
+      let count = 0;
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        const sanitizedChunk = chunk.map((r) => sanitizeRowForTable(table, r));
+        await db.insert(table as any).values(sanitizedChunk).onConflictDoNothing();
+        count += sanitizedChunk.length;
       }
+      restoredStats[name] = count;
+    } else {
+      restoredStats[name] = 0;
     }
-  });
+  }
 
   try {
     await logAuditEvent("RESTORE", "system", "all", {

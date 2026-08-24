@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { customers, invoices, products, rawMaterials, suppliers, projects, employees } from "@/db/schema";
+import { customers, invoices, products, rawMaterials, suppliers, projects, employees, accounts } from "@/db/schema";
 import { ilike, or } from "drizzle-orm";
 
 export async function GET(req: Request) {
@@ -22,6 +22,7 @@ export async function GET(req: Request) {
       matchedSuppliers,
       matchedProjects,
       matchedEmployees,
+      matchedAccounts,
     ] = await Promise.all([
       db
         .select({
@@ -141,6 +142,24 @@ export async function GET(req: Request) {
           )
         )
         .limit(6),
+
+      db
+        .select({
+          id: accounts.id,
+          title: accounts.name,
+          code: accounts.code,
+          detail: accounts.bankName,
+        })
+        .from(accounts)
+        .where(
+          or(
+            ilike(accounts.name, searchTerm),
+            ilike(accounts.code, searchTerm),
+            ilike(accounts.bankName, searchTerm),
+            ilike(accounts.accountNumber, searchTerm)
+          )
+        )
+        .limit(6),
     ]);
 
     const results = [
@@ -185,6 +204,12 @@ export async function GET(req: Request) {
         type: "employee",
         typeLabel: "همکار / ویزیتور",
         subtext: item.detail === "visitor" ? "ویزیتور" : item.detail === "accountant" ? "حسابدار" : item.code,
+      })),
+      ...matchedAccounts.map((item) => ({
+        ...item,
+        type: "account",
+        typeLabel: "حساب بانکی / صندوق",
+        subtext: item.detail ? `${item.code} - ${item.detail}` : item.code,
       })),
     ];
 
