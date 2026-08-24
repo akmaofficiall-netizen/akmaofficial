@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { rawMaterials, suppliers } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
-import { createRawMaterial, updateRawMaterial, adjustRawMaterialStock } from "@/services/rawMaterial";
+import { createRawMaterial, updateRawMaterial, adjustRawMaterialStock, deleteRawMaterial } from "@/services/rawMaterial";
 
 export async function GET() {
   try {
@@ -61,11 +61,26 @@ export async function POST(req: Request) {
       minStockQuantity: body.minStockQuantity !== undefined ? Number(body.minStockQuantity) : 10,
       currentCost: Number(body.currentCost),
       supplierId: body.supplierId || undefined,
+      costPolicy: body.costPolicy || "average",
       notes: body.notes || undefined,
     });
 
     return NextResponse.json({ success: true, rawMaterial: created });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ success: false, error: "شناسه ماده اولیه الزامی است." }, { status: 400 });
+    }
+    const result = await deleteRawMaterial(id);
+    return NextResponse.json({ success: true, message: `ماده اولیه "${result.deletedName}" با موفقیت حذف شد.` });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 400 });
   }
 }

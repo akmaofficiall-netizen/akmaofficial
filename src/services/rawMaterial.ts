@@ -1,6 +1,13 @@
 import { db } from "@/db";
-import { rawMaterials, rawMaterialPriceHistory, productRecipes, products } from "@/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import {
+  rawMaterials,
+  rawMaterialPriceHistory,
+  productRecipes,
+  products,
+  productionBatchItems,
+  purchaseItems,
+} from "@/db/schema";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { updateProductCostFromBOM } from "./pricing";
 import { recordInventoryTransaction } from "./inventory";
 import { logAuditEvent } from "./audit";
@@ -14,7 +21,7 @@ export interface CreateRawMaterialInput {
   stockQuantity?: number;
   minStockQuantity?: number;
   currentCost: number;
-  supplierId?: string;
+  supplierId?: string | null;
   costPolicy?: "average" | "fifo" | "latest";
   notes?: string;
 }
@@ -38,21 +45,44 @@ export interface UpdateRawMaterialInput {
  * Creates a new Raw Material
  */
 export async function createRawMaterial(input: CreateRawMaterialInput) {
+  const cleanCode = (input.code || "").trim();
+  const cleanName = (input.name || "").trim();
+
+  if (!cleanCode) throw new Error("کد ماده اولیه الزامی است.");
+  if (!cleanName) throw new Error("نام ماده اولیه الزامی است.");
+
+  // Check duplicate code
+  const [existingCode] = await db
+    .select({ id: rawMaterials.id })
+    .from(rawMaterials)
+    .where(eq(rawMaterials.code, cleanCode))
+    .limit(1);
+
+  if (existingCode) {
+    throw new Error(`کد ماده اولیه "${cleanCode}" قبلاً ثبت شده است. لطفاً کد دیگری وارد کنید.`);
+  }
+
+  const supplierIdValue = input.supplierId && input.supplierId.trim().length > 0 ? input.supplierId.trim() : null;
+  const cost = Number(input.currentCost) >= 0 ? Number(input.currentCost) : 0;
+  const stockQty = Number(input.stockQuantity) >= 0 ? Number(input.stockQuantity) : 0;
+  const minStockQty = Number(input.minStockQuantity) >= 0 ? Number(input.minStockQuantity) : 10;
+  const conversionFactor = Number(input.unitConversionFactor) > 0 ? Number(input.unitConversionFactor) : 1;
+
   const [rm] = await db
     .insert(rawMaterials)
     .values({
-      code: input.code,
-      name: input.name,
+      code: cleanCode,
+      name: cleanName,
       unit: input.unit || "کیلوگرم",
-      unitConversionFactor: (input.unitConversionFactor || 1).toString(),
-      secondaryUnit: input.secondaryUnit || null,
-      stockQuantity: (input.stockQuantity || 0).toString(),
-      minStockQuantity: (input.minStockQuantity || 10).toString(),
-      currentCost: input.currentCost.toString(),
-      averageCost: input.currentCost.toString(),
-      supplierId: input.supplierId || null,
+      unitConversionFactor: conversionFactor.toString(),
+      secondaryUnit: input.secondaryUnit ? input.secondaryUnit.trim() : null,
+      stockQuantity: stockQty.toString(),
+      minStockQuantity: minStockQty.toString(),
+      currentCost: cost.toString(),
+      averageCost: cost.toString(),
+      supplierId: supplierIdValue,
       costPolicy: input.costPolicy || "average",
-      notes: input.notes || null,
+      notes: input.notes ? input.notes.trim() : null,
     })
     .returning();
 
@@ -60,12 +90,12 @@ export async function createRawMaterial(input: CreateRawMaterialInput) {
   await db.insert(rawMaterialPriceHistory).values({
     rawMaterialId: rm.id,
     oldCost: "0",
-    newCost: input.currentCost.toString(),
+    newCost: cost.toString(),
     changePercent: "100",
     reason: "قیمت اولیه",
   });
 
-  await logAuditEvent("CREATE", "raw_material", rm.id, { name: rm.name, code: rm.code, cost: input.currentCost });
+  await logAuditEvent("CREATE", "raw_material", rm.id, { name: rm.name, code: rm.code, cost });
   return rm;
 }
 
@@ -79,21 +109,53 @@ export async function updateRawMaterial(id: string, input: UpdateRawMaterialInpu
     throw new Error("ماده اولیه پیدا نشد");
   }
 
-  const oldCost = Number(existing.currentCost);
-  const newCost = input.currentCost !== undefined ? input.currentCost : oldCost;
-
   const updatePayload: Record<string, any> = { updatedAt: new Date() };
 
-  if (input.name !== undefined) updatePayload.name = input.name;
-  if (input.code !== undefined) updatePayload.code = input.code;
+  if (input.code !== undefined) {
+    const cleanCode = input.code.trim();
+    if (!cleanCode) throw new Error("کد ماده اولیه نمی‌تواند خالی باشد.");
+    if (cleanCode !== existing.code) {
+      const [existingCode] = await db
+        .select({ id: rawMaterials.id })
+        .from(rawMaterials)
+        .where(eq(rawMaterials.code, cleanCode))
+        .limit(1);
+      if (existingCode) {
+        throw new Error(`کد ماده اولیه "${cleanCode}" قبلاً برای ماده دیگری ثبت شده است.`);
+      }
+    }
+    updatePayload.code = cleanCode;
+  }
+
+  if (input.name !== undefined) {
+    const cleanName = input.name.trim();
+    if (!cleanName) throw new Error("نام ماده اولیه نمی‌تواند خالی باشد.");
+    updatePayload.name = cleanName;
+  }
+
   if (input.unit !== undefined) updatePayload.unit = input.unit;
-  if (input.unitConversionFactor !== undefined) updatePayload.unitConversionFactor = input.unitConversionFactor.toString();
-  if (input.secondaryUnit !== undefined) updatePayload.secondaryUnit = input.secondaryUnit;
-  if (input.minStockQuantity !== undefined) updatePayload.minStockQuantity = input.minStockQuantity.toString();
-  if (input.supplierId !== undefined) updatePayload.supplierId = input.supplierId;
+  if (input.unitConversionFactor !== undefined) {
+    const factor = Number(input.unitConversionFactor) > 0 ? Number(input.unitConversionFactor) : 1;
+    updatePayload.unitConversionFactor = factor.toString();
+  }
+  if (input.secondaryUnit !== undefined) {
+    updatePayload.secondaryUnit = input.secondaryUnit && input.secondaryUnit.trim() ? input.secondaryUnit.trim() : null;
+  }
+  if (input.minStockQuantity !== undefined) {
+    const minQty = Number(input.minStockQuantity) >= 0 ? Number(input.minStockQuantity) : 0;
+    updatePayload.minStockQuantity = minQty.toString();
+  }
+  if (input.supplierId !== undefined) {
+    updatePayload.supplierId = input.supplierId && input.supplierId.trim().length > 0 ? input.supplierId.trim() : null;
+  }
   if (input.costPolicy !== undefined) updatePayload.costPolicy = input.costPolicy;
   if (input.status !== undefined) updatePayload.status = input.status;
-  if (input.notes !== undefined) updatePayload.notes = input.notes;
+  if (input.notes !== undefined) {
+    updatePayload.notes = input.notes && input.notes.trim() ? input.notes.trim() : null;
+  }
+
+  const oldCost = Number(existing.currentCost);
+  const newCost = input.currentCost !== undefined ? Number(input.currentCost) : oldCost;
 
   let priceChanged = false;
 
@@ -147,6 +209,71 @@ export async function updateRawMaterial(id: string, input: UpdateRawMaterialInpu
   });
 
   return updated;
+}
+
+/**
+ * Deletes a Raw Material with comprehensive dependency checks
+ */
+export async function deleteRawMaterial(id: string) {
+  const [existing] = await db.select().from(rawMaterials).where(eq(rawMaterials.id, id)).limit(1);
+  if (!existing) {
+    throw new Error("ماده اولیه پیدا نشد.");
+  }
+
+  // 1. Check if used in production batches
+  const batchUsage = await db
+    .select({ id: productionBatchItems.id })
+    .from(productionBatchItems)
+    .where(eq(productionBatchItems.rawMaterialId, id))
+    .limit(1);
+
+  if (batchUsage.length > 0) {
+    throw new Error("امکان حذف این ماده اولیه وجود ندارد؛ زیرا در سوابق مصرف بچ‌های تولیدی استفاده شده است.");
+  }
+
+  // 2. Check if used in purchases
+  const purchaseUsage = await db
+    .select({ id: purchaseItems.id })
+    .from(purchaseItems)
+    .where(and(eq(purchaseItems.itemId, id), eq(purchaseItems.itemType, "raw_material")))
+    .limit(1);
+
+  if (purchaseUsage.length > 0) {
+    throw new Error("امکان حذف این ماده اولیه وجود ندارد؛ زیرا در فاکتورهای خرید ثبت شده است.");
+  }
+
+  // 3. Find affected BOM recipes
+  const recipeUsage = await db
+    .select({ id: productRecipes.id, productId: productRecipes.productId })
+    .from(productRecipes)
+    .where(eq(productRecipes.rawMaterialId, id));
+
+  const affectedProductIds = Array.from(new Set(recipeUsage.map((r) => r.productId)));
+
+  // Delete price history
+  await db.delete(rawMaterialPriceHistory).where(eq(rawMaterialPriceHistory.rawMaterialId, id));
+
+  // Delete from product recipes
+  await db.delete(productRecipes).where(eq(productRecipes.rawMaterialId, id));
+
+  // Delete raw material itself
+  await db.delete(rawMaterials).where(eq(rawMaterials.id, id));
+
+  // Update BOM cost for affected products
+  for (const prodId of affectedProductIds) {
+    try {
+      await updateProductCostFromBOM(prodId);
+    } catch {
+      // Continue if BOM update fails
+    }
+  }
+
+  await logAuditEvent("DELETE", "raw_material", id, {
+    name: existing.name,
+    code: existing.code,
+  });
+
+  return { success: true, deletedName: existing.name };
 }
 
 /**
