@@ -6,18 +6,43 @@ import { updateProductCostFromBOM } from "@/services/pricing";
 import { logAuditEvent } from "@/services/audit";
 import { requirePermission } from "@/services/access";
 
-export async function GET() {
-  try { await requirePermission("products.view");
+export async function GET(req: Request) {
+  try {
+    await requirePermission("products.view");
+    const { searchParams } = new URL(req.url);
+    const projectId = searchParams.get("projectId");
+
     const list = await db.select().from(products).orderBy(desc(products.createdAt));
 
-    const formatted = list.map((p) => ({
-      ...p,
-      basePrice: Number(p.basePrice),
-      calculatedCost: Number(p.calculatedCost),
-      stockQuantity: Number(p.stockQuantity),
-      minStockQuantity: Number(p.minStockQuantity),
-      isLowStock: Number(p.stockQuantity) <= Number(p.minStockQuantity),
-    }));
+    let projectPricesMap = new Map<string, number>();
+    if (projectId) {
+      const pPrices = await db
+        .select()
+        .from(projectProductPrices)
+        .where(eq(projectProductPrices.projectId, projectId));
+      for (const pp of pPrices) {
+        if (pp.customPrice !== null) {
+          projectPricesMap.set(pp.productId, Number(pp.customPrice));
+        }
+      }
+    }
+
+    const formatted = list.map((p) => {
+      const basePrice = Number(p.basePrice) || 0;
+      const projectPrice = projectPricesMap.get(p.id);
+      const effectivePrice = projectPrice !== undefined ? projectPrice : basePrice;
+
+      return {
+        ...p,
+        basePrice,
+        effectivePrice,
+        hasProjectOverride: projectPrice !== undefined,
+        calculatedCost: Number(p.calculatedCost),
+        stockQuantity: Number(p.stockQuantity),
+        minStockQuantity: Number(p.minStockQuantity),
+        isLowStock: Number(p.stockQuantity) <= Number(p.minStockQuantity),
+      };
+    });
 
     return NextResponse.json({ success: true, products: formatted });
   } catch (error: any) {

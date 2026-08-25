@@ -404,6 +404,20 @@ export async function getInventoryAndRawMaterialReport(filter: ReportFilter = {}
     });
   }
 
+  const productMap = new Map(allProducts.map((p) => [p.id, p]));
+  const rmMap = new Map(allRawMaterials.map((rm) => [rm.id, rm]));
+
+  const formattedLedger = recentLedger.map((l) => {
+    const isProd = l.itemType === "product";
+    const item = isProd ? productMap.get(l.itemId) : rmMap.get(l.itemId);
+    return {
+      ...l,
+      itemName: item ? item.name : (isProd ? "محصول نامشخص" : "ماده اولیه نامشخص"),
+      itemCode: item?.code || "-",
+      unit: item?.unit || "-",
+    };
+  });
+
   return {
     totalRawMaterialValue: totalRmValue,
     rawMaterials: rawMaterialDetails,
@@ -418,7 +432,7 @@ export async function getInventoryAndRawMaterialReport(filter: ReportFilter = {}
       basePrice: Number(p.basePrice),
       totalValue: (Number(p.stockQuantity) || 0) * (Number(p.calculatedCost) || Number(p.basePrice) || 0),
     })),
-    recentLedger,
+    recentLedger: formattedLedger,
   };
 }
 

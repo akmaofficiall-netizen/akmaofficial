@@ -10,9 +10,11 @@ import {
   CheckCircle,
   X,
   Package,
-  Layers
+  Layers,
+  AlertCircle,
 } from "lucide-react";
-import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
+import { toJalaliDate, formatMoney, formatNumber, formatRial } from "@/lib/dateUtils";
+import { parsePersianError } from "@/lib/errorUtils";
 
 export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [batches, setBatches] = useState<any[]>([]);
@@ -24,6 +26,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const [form, setForm] = useState({
     productId: "",
@@ -34,6 +37,11 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
     packagingCost: 0,
     notes: "",
   });
+
+  const showToast = (text: string, type: "success" | "error" = "success") => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -49,6 +57,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
       if (projRes.success) setProjects(projRes.projects || []);
     } catch (err) {
       console.error("Error fetching production data:", err);
+      showToast(parsePersianError(err), "error");
     } finally {
       setLoading(false);
     }
@@ -90,13 +99,13 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
 
       if (res.success) {
         setIsModalOpen(false);
-        fetchData();
-        alert("بچ تولید با موفقیت ثبت شد. مواد اولیه کسر و محصول نهایی به موجودی اضافه گردید.");
+        await fetchData();
+        showToast("بچ تولید با موفقیت ثبت شد. مواد اولیه کسر و محصول نهایی به موجودی انبار اضافه گردید.", "success");
       } else {
-        setErrorMessage(res.error || "خطا در ثبت بچ تولید");
+        setErrorMessage(parsePersianError(res.error || "خطا در ثبت بچ تولید"));
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "خطا در ارتباط با سرور");
+      setErrorMessage(parsePersianError(err.message || "خطا در ارتباط با سرور"));
     } finally {
       setSaving(false);
     }
@@ -104,6 +113,24 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-2xl px-5 py-3 shadow-2xl transition-all duration-300 text-xs font-semibold backdrop-blur-md ${
+            toastMessage.type === "success"
+              ? "bg-emerald-950/90 text-emerald-300 border border-emerald-500/40"
+              : "bg-rose-950/90 text-rose-300 border border-rose-500/40"
+          }`}
+        >
+          {toastMessage.type === "success" ? (
+            <CheckCircle className="h-4 w-4 text-emerald-400" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-rose-400" />
+          )}
+          {toastMessage.text}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -118,7 +145,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
 
         <button
           onClick={openModal}
-          className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-500 transition-all"
+          className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-500 transition-all cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           ثبت بچ تولید جدید
@@ -138,26 +165,36 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                 <th className="p-4">هزینه مواد اولیه</th>
                 <th className="p-4">هزینه کل بچ (تومان)</th>
                 <th className="p-4">بهای تمام شده واحد</th>
+                <th className="p-4">معادل ریال</th>
                 <th className="p-4">تاریخ تولید</th>
                 <th className="p-4">وضعیت</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {batches.map((b) => (
-                <tr key={b.id} className="hover:bg-slate-800/40 transition-all">
-                  <td className="p-4 font-mono font-bold text-amber-300">{b.batchNumber}</td>
-                  <td className="p-4 font-bold text-white">{b.productName}</td>
-                  <td className="p-4 text-slate-400">{b.projectName}</td>
-                  <td className="p-4 font-bold text-slate-200">{b.quantityProduced}</td>
-                  <td className="p-4 text-slate-300">{Number(b.totalMaterialCost).toLocaleString("fa-IR")}</td>
-                  <td className="p-4 font-bold text-emerald-400">{b.totalBatchCost.toLocaleString("fa-IR")}</td>
-                  <td className="p-4 font-semibold text-sky-300">{b.unitCost.toLocaleString("fa-IR")}</td>
-                  <td className="p-4 text-slate-400">{toJalaliDate(b.productionDate || b.createdAt, { showTime: true })}</td>
-                  <td className="p-4">
-                    <NeonBadge variant="green">تکمیل شده</NeonBadge>
+              {batches.length > 0 ? (
+                batches.map((b) => (
+                  <tr key={b.id} className="hover:bg-slate-800/40 transition-all">
+                    <td className="p-4 font-mono font-bold text-amber-300">{b.batchNumber}</td>
+                    <td className="p-4 font-bold text-white">{b.productName}</td>
+                    <td className="p-4 text-slate-400">{b.projectName}</td>
+                    <td className="p-4 font-mono font-bold text-slate-200">{formatNumber(b.quantityProduced)}</td>
+                    <td className="p-4 font-mono text-slate-300">{formatMoney(b.totalMaterialCost)}</td>
+                    <td className="p-4 font-mono font-bold text-emerald-400">{formatMoney(b.totalBatchCost)}</td>
+                    <td className="p-4 font-mono font-semibold text-sky-300">{formatMoney(b.unitCost)}</td>
+                    <td className="p-4 font-mono text-slate-400 text-[11px]">{formatRial(b.totalBatchCost)}</td>
+                    <td className="p-4 font-mono text-slate-400">{toJalaliDate(b.productionDate || b.createdAt, { showTime: true })}</td>
+                    <td className="p-4">
+                      <NeonBadge variant="green">تکمیل شده</NeonBadge>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={10} className="p-8 text-center text-slate-500">
+                    هیچ بچ تولیدی ثبت نشده است.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -172,14 +209,15 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                 <Factory className="h-5 w-5 text-amber-400" />
                 ثبت دستور تولید جدید (بچ تولید)
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {errorMessage && (
-              <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300">
-                {errorMessage}
+              <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                <span>{errorMessage}</span>
               </div>
             )}
 
@@ -189,7 +227,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                 <select
                   value={form.productId}
                   onChange={(e) => setForm({ ...form, productId: e.target.value })}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white cursor-pointer"
                 >
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -208,7 +246,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                     min={1}
                     value={form.quantityToProduce}
                     onChange={(e) => setForm({ ...form, quantityToProduce: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-bold"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-bold font-mono"
                   />
                 </div>
 
@@ -217,7 +255,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                   <select
                     value={form.projectId}
                     onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white cursor-pointer"
                   >
                     <option value="">-- عمومی --</option>
                     {projects.map((p) => (
@@ -236,7 +274,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                     type="number"
                     value={form.laborCost}
                     onChange={(e) => setForm({ ...form, laborCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
                   />
                 </div>
                 <div>
@@ -245,16 +283,16 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                     type="number"
                     value={form.overheadCost}
                     onChange={(e) => setForm({ ...form, overheadCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">هزینه بسته‌بندی</label>
+                  <label className="block text-slate-400 mb-1">هزینه بسته‌بندی (تومان)</label>
                   <input
                     type="number"
                     value={form.packagingCost}
                     onChange={(e) => setForm({ ...form, packagingCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
                   />
                 </div>
               </div>
@@ -263,14 +301,14 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-slate-400 hover:text-white"
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-slate-400 hover:text-white cursor-pointer"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-xl bg-amber-600 px-5 py-2 font-semibold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-500"
+                  className="rounded-xl bg-amber-600 px-5 py-2 font-semibold text-white shadow-lg shadow-amber-600/30 hover:bg-amber-500 cursor-pointer"
                 >
                   {saving ? "در حال پردازش تولید..." : "اجرا و ثبت بچ تولید"}
                 </button>

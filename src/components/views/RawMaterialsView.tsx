@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
+import { parsePersianError } from "@/lib/errorUtils";
 import {
   Package,
   Plus,
@@ -185,10 +186,10 @@ export const RawMaterialsView: React.FC = () => {
         showToast(`ماده اولیه "${cleanName}" با موفقیت ثبت شد.`);
         await fetchData();
       } else {
-        setErrorMessage(res.error || "خطا در ثبت ماده اولیه");
+        setErrorMessage(parsePersianError(res.error || "خطا در ثبت ماده اولیه"));
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "خطای ارتباط با سرور");
+      setErrorMessage(parsePersianError(err.message || "خطای ارتباط با سرور"));
     } finally {
       setSaving(false);
     }
@@ -228,10 +229,10 @@ export const RawMaterialsView: React.FC = () => {
         showToast(`ماده اولیه "${cleanName}" با موفقیت ویرایش گردید.`);
         await fetchData();
       } else {
-        setErrorMessage(res.error || "خطا در به روزرسانی ماده اولیه");
+        setErrorMessage(parsePersianError(res.error || "خطا در به روزرسانی ماده اولیه"));
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "خطای ارتباط با سرور");
+      setErrorMessage(parsePersianError(err.message || "خطای ارتباط با سرور"));
     } finally {
       setSaving(false);
     }
@@ -252,10 +253,10 @@ export const RawMaterialsView: React.FC = () => {
         setDeletingMaterial(null);
         await fetchData();
       } else {
-        setDeleteErrorMessage(res.error || "خطا در حذف ماده اولیه");
+        setDeleteErrorMessage(parsePersianError(res.error || "خطا در حذف ماده اولیه"));
       }
     } catch (err: any) {
-      setDeleteErrorMessage(err.message || "خطای ارتباط با سرور در هنگام حذف");
+      setDeleteErrorMessage(parsePersianError(err.message || "خطای ارتباط با سرور در هنگام حذف"));
     } finally {
       setDeleting(false);
     }
@@ -412,14 +413,18 @@ export const RawMaterialsView: React.FC = () => {
                     <td className="p-4 text-slate-300">{rm.unit}</td>
                     <td className="p-4">
                       <div className="flex items-center gap-2">
-                        <span className={`font-bold ${rm.isLowStock ? "text-amber-400" : "text-slate-200"}`}>
+                        <span className={`font-mono font-bold ${Number(rm.stockQuantity || 0) <= 0 ? "text-rose-400 font-black" : rm.isLowStock ? "text-amber-400" : "text-slate-200"}`}>
                           {Number(rm.stockQuantity || 0).toLocaleString("fa-IR")}
                         </span>
-                        {rm.isLowStock && (
-                          <NeonBadge variant="yellow" size="sm" pulse>
-                            کمبود
+                        {Number(rm.stockQuantity || 0) <= 0 ? (
+                          <NeonBadge variant="red" size="sm" pulse>
+                            موجودی صفر (اتمام)
                           </NeonBadge>
-                        )}
+                        ) : rm.isLowStock ? (
+                          <NeonBadge variant="yellow" size="sm" pulse>
+                            کمبود موجودی
+                          </NeonBadge>
+                        ) : null}
                       </div>
                     </td>
                     <td className="p-4 font-semibold text-emerald-400">

@@ -86,6 +86,21 @@ export function formatMoney(amount: number | string | null | undefined, unit: st
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
+// Format Money with both Toman and Rial display
+export function formatMoneyDual(amountInToman: number | string | null | undefined): string {
+  const toman = Math.round(Number(amountInToman) || 0);
+  const rial = toman * 10;
+  const tomanStr = new Intl.NumberFormat("fa-IR").format(toman);
+  const rialStr = new Intl.NumberFormat("fa-IR").format(rial);
+  return `${tomanStr} تومان (${rialStr} ریال)`;
+}
+
+// Format amount explicitly in Rial
+export function formatRial(amountInToman: number | string | null | undefined): string {
+  const rial = Math.round(Number(amountInToman) || 0) * 10;
+  return `${new Intl.NumberFormat("fa-IR").format(rial)} ریال`;
+}
+
 // Format simple number with Persian comma separator
 export function formatNumber(amount: number | string | null | undefined): string {
   const num = Number(amount) || 0;
