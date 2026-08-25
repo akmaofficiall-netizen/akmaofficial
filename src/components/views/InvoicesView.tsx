@@ -30,7 +30,8 @@ import {
 } from "lucide-react";
 import { toJalaliDate, formatMoney, formatMoneyDual, formatRial, formatNumber } from "@/lib/dateUtils";
 import { numberToPersianWords } from "@/lib/numberToWords";
-import html2canvas from "html2canvas";
+import { MoneyInput } from "@/components/ui/MoneyInput";
+import { triggerInvoicePrint, downloadInvoiceJpg } from "@/lib/invoicePrintHelper";
 
 export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -465,50 +466,18 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   };
 
   const handleDownloadJpg = async () => {
-    if (!printAreaRef.current) return;
+    if (!viewingInvoice) return;
     setDownloadingJpg(true);
     try {
-      const element = printAreaRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        imageTimeout: 0,
-        onclone: (clonedDoc) => {
-          const clonedElement = clonedDoc.getElementById("persian-official-invoice");
-          if (clonedElement) {
-            clonedElement.style.background = "#ffffff";
-            clonedElement.style.color = "#0f172a";
-            clonedElement.style.boxShadow = "none";
-            const allElements = clonedElement.getElementsByTagName("*");
-            for (let i = 0; i < allElements.length; i++) {
-              const el = allElements[i] as HTMLElement;
-              const computed = window.getComputedStyle(el);
-              if (computed.color && computed.color.includes("oklch")) {
-                el.style.color = "#0f172a";
-              }
-              if (computed.backgroundColor && computed.backgroundColor.includes("oklch")) {
-                el.style.backgroundColor = "#ffffff";
-              }
-              if (computed.borderColor && computed.borderColor.includes("oklch")) {
-                el.style.borderColor = "#94a3b8";
-              }
-            }
-          }
-        },
-      });
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      const link = document.createElement("a");
-      link.href = imgData;
-      link.download = `Factor-${viewingInvoice?.invoice?.invoiceNumber || "Official"}.jpg`;
-      link.click();
-    } catch (err: any) {
-      console.error("Download JPG error:", err);
-      alert("خطا در ایجاد تصویر فاکتور: " + (err.message || "لطفاً مجدداً تلاش نمایید."));
+      await downloadInvoiceJpg(viewingInvoice, printAreaRef.current);
     } finally {
       setDownloadingJpg(false);
     }
+  };
+
+  const handlePrintInvoice = () => {
+    if (!viewingInvoice) return;
+    triggerInvoicePrint(viewingInvoice);
   };
 
   const calculateSubtotal = () => {
@@ -880,31 +849,27 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                               />
                             </td>
                             <td className="p-3">
-                              <input
-                                type="number"
-                                step="1000"
+                              <MoneyInput
                                 value={item.unitPrice}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value) || 0;
+                                onChange={(val) => {
                                   const updated = [...form.items];
                                   updated[idx].unitPrice = val;
                                   setForm({ ...form, items: updated });
                                 }}
-                                className="w-32 rounded-xl border border-slate-800 bg-slate-900 p-2 text-left text-white font-mono"
+                                className="w-32 text-xs py-1.5"
+                                unit="تومان"
                               />
                             </td>
                             <td className="p-3">
-                              <input
-                                type="number"
-                                step="1000"
+                              <MoneyInput
                                 value={item.discountAmount}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value) || 0;
+                                onChange={(val) => {
                                   const updated = [...form.items];
                                   updated[idx].discountAmount = val;
                                   setForm({ ...form, items: updated });
                                 }}
-                                className="w-28 rounded-xl border border-slate-800 bg-slate-900 p-2 text-left text-white font-mono"
+                                className="w-28 text-xs py-1.5"
+                                unit="تومان"
                               />
                             </td>
                             <td className="p-3 font-mono font-bold text-white">
@@ -936,13 +901,12 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                   </h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-slate-400 mb-1">مبلغ پیش‌پرداخت (تومان)</label>
-                      <input
-                        type="number"
-                        step="10000"
+                      <label className="block text-slate-400 mb-1">مبلغ پیش‌پرداخت</label>
+                      <MoneyInput
                         value={form.initialPaymentAmount}
-                        onChange={(e) => setForm({ ...form, initialPaymentAmount: Number(e.target.value) || 0 })}
-                        className="w-full rounded-xl border border-slate-800 bg-slate-950 p-2 text-white font-mono"
+                        onChange={(val) => setForm({ ...form, initialPaymentAmount: val })}
+                        className="w-full text-xs py-2"
+                        unit="تومان"
                       />
                     </div>
                     <div>
@@ -969,13 +933,14 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                   </div>
                   <div className="flex justify-between items-center text-slate-400">
                     <span>تخفیف کلی فاکتور:</span>
-                    <input
-                      type="number"
-                      step="10000"
-                      value={form.invoiceDiscount}
-                      onChange={(e) => setForm({ ...form, invoiceDiscount: Number(e.target.value) || 0 })}
-                      className="w-28 rounded-lg border border-slate-800 bg-slate-950 p-1 text-left text-white font-mono text-xs"
-                    />
+                    <div className="w-36">
+                      <MoneyInput
+                        value={form.invoiceDiscount}
+                        onChange={(val) => setForm({ ...form, invoiceDiscount: val })}
+                        className="text-xs py-1"
+                        unit="تومان"
+                      />
+                    </div>
                   </div>
                   <div className="flex justify-between text-sm font-bold text-white border-t border-slate-800 pt-2">
                     <span>مبلغ قابل پرداخت نهایی:</span>
@@ -1145,13 +1110,12 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="block text-slate-400 mb-1">مبلغ واریزی (تومان)</label>
-                    <input
-                      type="number"
-                      step="10000"
+                    <label className="block text-slate-400 mb-1">مبلغ واریزی</label>
+                    <MoneyInput
                       value={paymentForm.amount}
-                      onChange={(e) => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) || 0 })}
-                      className="w-full rounded-xl border border-slate-800 bg-slate-950 p-2.5 text-white font-mono"
+                      onChange={(val) => setPaymentForm({ ...paymentForm, amount: val })}
+                      className="w-full text-xs py-2"
+                      unit="تومان"
                     />
                   </div>
 
@@ -1246,21 +1210,21 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                 <button
                   onClick={handleDownloadJpg}
                   disabled={downloadingJpg}
-                  className="flex items-center gap-1.5 rounded-xl border border-purple-600 bg-purple-50 px-4 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100 transition shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl border border-purple-600 bg-purple-50 px-4 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100 transition shadow-sm cursor-pointer"
                 >
                   <ImageIcon className="h-4 w-4" />
                   {downloadingJpg ? "در حال تولید تصویر..." : "دانلود تصویر فاکتور (JPG)"}
                 </button>
                 <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition shadow-md"
+                  onClick={handlePrintInvoice}
+                  className="flex items-center gap-1.5 rounded-xl bg-purple-700 px-4 py-2 text-xs font-bold text-white hover:bg-purple-800 transition shadow-md cursor-pointer"
                 >
                   <Printer className="h-4 w-4" />
-                  چاپ فاکتور (PDF)
+                  چاپ و دانلود PDF فاکتور
                 </button>
                 <button
                   onClick={() => setViewingInvoice(null)}
-                  className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl"
+                  className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl cursor-pointer"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -1614,32 +1578,30 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                       </div>
 
                       <div className="col-span-3">
-                        <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد (تومان)</label>
-                        <input
-                          type="number"
-                          min="0"
+                        <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
+                        <MoneyInput
                           value={item.unitPrice}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             const updated = [...editForm.items];
-                            updated[index].unitPrice = Number(e.target.value);
+                            updated[index].unitPrice = val;
                             setEditForm({ ...editForm, items: updated });
                           }}
-                          className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center"
+                          className="w-full text-xs py-1.5"
+                          unit="تومان"
                         />
                       </div>
 
                       <div className="col-span-2">
                         <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
-                        <input
-                          type="number"
-                          min="0"
+                        <MoneyInput
                           value={item.discountAmount}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             const updated = [...editForm.items];
-                            updated[index].discountAmount = Number(e.target.value);
+                            updated[index].discountAmount = val;
                             setEditForm({ ...editForm, items: updated });
                           }}
-                          className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center"
+                          className="w-full text-xs py-1.5"
+                          unit="تومان"
                         />
                       </div>
 
@@ -1661,13 +1623,12 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
               {/* Bottom Calculations & Discount */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">تخفیف کلی فاکتور (تومان):</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <label className="block text-slate-300 font-semibold mb-1">تخفیف کلی فاکتور:</label>
+                  <MoneyInput
                     value={editForm.invoiceDiscount}
-                    onChange={(e) => setEditForm({ ...editForm, invoiceDiscount: Number(e.target.value) })}
-                    className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-2.5 text-white font-mono"
+                    onChange={(val) => setEditForm({ ...editForm, invoiceDiscount: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                   <label className="block text-slate-300 font-semibold mb-1 mt-3">یادداشت و توضیحات:</label>
                   <textarea

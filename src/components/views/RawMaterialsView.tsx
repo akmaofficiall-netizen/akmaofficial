@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import { parsePersianError } from "@/lib/errorUtils";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import {
   Package,
   Plus,
@@ -565,15 +566,12 @@ export const RawMaterialsView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">قیمت خرید جاری (تومان) *</label>
-                  <input
-                    id="input-add-rm-cost"
-                    type="number"
-                    min="0"
-                    required
+                  <label className="block text-slate-400 mb-1">قیمت خرید جاری *</label>
+                  <MoneyInput
                     value={formData.currentCost}
-                    onChange={(e) => setFormData({ ...formData, currentCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-semibold text-emerald-400 focus:border-blue-500 focus:outline-none"
+                    onChange={(val) => setFormData({ ...formData, currentCost: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
               </div>
@@ -701,14 +699,12 @@ export const RawMaterialsView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">قیمت خرید جاری (تومان) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
+                  <label className="block text-slate-400 mb-1">قیمت خرید جاری *</label>
+                  <MoneyInput
                     value={formData.currentCost}
-                    onChange={(e) => setFormData({ ...formData, currentCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-semibold text-emerald-400 focus:border-blue-500 focus:outline-none"
+                    onChange={(val) => setFormData({ ...formData, currentCost: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
                 <div>

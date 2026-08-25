@@ -34,6 +34,7 @@ import {
 } from "recharts";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 const statusText = (s: string) =>
   ({
@@ -974,14 +975,12 @@ export const EmployeesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">حقوق پایه ماهانه (تومان):</label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="مثال: 15000000"
+                <label className="block text-slate-300 font-semibold mb-1">حقوق پایه ماهانه:</label>
+                <MoneyInput
                   value={form.baseSalary}
-                  onChange={(e) => setForm({ ...form, baseSalary: Number(e.target.value) })}
-                  className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-2.5 text-white font-bold"
+                  onChange={(val) => setForm({ ...form, baseSalary: val })}
+                  className="w-full text-xs py-2"
+                  unit="تومان"
                 />
               </div>
 

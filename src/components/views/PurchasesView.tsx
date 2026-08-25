@@ -20,6 +20,7 @@ import {
   FileText
 } from "lucide-react";
 import { toJalaliDate, formatMoney } from "@/lib/dateUtils";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 export const PurchasesView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<"purchases" | "suppliers">("purchases");
@@ -225,6 +226,27 @@ export const PurchasesView: React.FC = () => {
     }
   };
 
+  const handleDeleteSupplier = async (sup: any) => {
+    if (!window.confirm(`آیا از ابطال و حذف تامین‌کننده "${sup.name}" (${sup.code}) اطمینان دارید؟`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/suppliers/${sup.id}`, {
+        method: "DELETE",
+      }).then((r) => r.json());
+
+      if (res.success) {
+        alert("تامین‌کننده با موفقیت باطل و حذف گردید.");
+        await fetchData();
+      } else {
+        alert(res.error || "خطا در حذف تامین‌کننده");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور");
+    }
+  };
+
   const totalPurchaseSum = purchaseForm.items.reduce(
     (acc, curr) => acc + (Number(curr.quantity) || 0) * (Number(curr.unitCost) || 0),
     0
@@ -359,13 +381,22 @@ export const PurchasesView: React.FC = () => {
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={() => openSupplierModal(sup)}
-                    className="p-2 rounded-xl bg-slate-800 text-cyan-400 hover:bg-slate-700 hover:text-white transition"
-                    title="ویرایش تامین‌کننده"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openSupplierModal(sup)}
+                      className="p-2 rounded-xl bg-slate-800 text-cyan-400 hover:bg-slate-700 hover:text-white transition"
+                      title="ویرایش اطلاعات تامین‌کننده"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSupplier(sup)}
+                      className="p-2 rounded-xl bg-rose-950/30 text-rose-400 border border-rose-500/20 hover:bg-rose-900/40 hover:text-rose-200 transition"
+                      title="ابطال و حذف تامین‌کننده"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 text-xs text-slate-300 border-t border-slate-800 pt-3">
@@ -546,19 +577,16 @@ export const PurchasesView: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">قیمت خرید هر واحد (تومان):</label>
-                        <input
-                          type="number"
-                          step="1"
-                          min="0"
-                          placeholder="مثال: 120000"
+                        <label className="block text-[11px] text-slate-400 mb-1">قیمت خرید هر واحد:</label>
+                        <MoneyInput
                           value={item.unitCost}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             const updated = [...purchaseForm.items];
-                            updated[idx].unitCost = Number(e.target.value);
+                            updated[idx].unitCost = val;
                             setPurchaseForm({ ...purchaseForm, items: updated });
                           }}
-                          className="w-full rounded-xl border border-slate-800 bg-slate-950 p-2.5 text-emerald-400 font-bold"
+                          className="w-full text-xs py-2"
+                          unit="تومان"
                         />
                       </div>
                     </div>
@@ -569,14 +597,12 @@ export const PurchasesView: React.FC = () => {
               {/* Payment and Totals */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1.5">مبلغ پرداخت شده نقد/کارت (تومان):</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="مبلغ پرداختی اولیه (اختیاری)"
+                  <label className="block text-slate-300 font-semibold mb-1.5">مبلغ پرداخت شده نقد/کارت:</label>
+                  <MoneyInput
                     value={purchaseForm.paidAmount}
-                    onChange={(e) => setPurchaseForm({ ...purchaseForm, paidAmount: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-white font-bold"
+                    onChange={(val) => setPurchaseForm({ ...purchaseForm, paidAmount: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
                 <div>

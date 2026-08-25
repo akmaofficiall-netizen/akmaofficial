@@ -25,6 +25,7 @@ import {
   History
 } from "lucide-react";
 import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({ selectedProjectId }) => {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -37,6 +38,16 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
   const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
   const [viewingProfile, setViewingProfile] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const getCustomerEmployeeName = (c: any) => {
+    if (!c) return "تعیین نشده";
+    if (c.employeeName && c.employeeName !== "بدون ویزیتور") return c.employeeName;
+    if (c.assignedEmployeeName && c.assignedEmployeeName !== "بدون ویزیتور") return c.assignedEmployeeName;
+    if (c.assignedEmployeeId) {
+      const match = employees.find((e) => e.id === c.assignedEmployeeId);
+      if (match) return match.name;
+    }
+    return "تعیین نشده";
+  };
 
   const [formData, setFormData] = useState({
     code: "",
@@ -164,6 +175,10 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
         setIsAddModalOpen(false);
         setEditingCustomer(null);
         await fetchData();
+        if (viewingProfile && (editingCustomer?.id === viewingProfile.id || res.customer?.id === viewingProfile.id)) {
+          const updatedCustomer = res.customer || { ...viewingProfile, ...formData };
+          setViewingProfile(updatedCustomer);
+        }
         alert(editingCustomer ? "اطلاعات مشتری ویرایش گردید." : "مشتری جدید با موفقیت ثبت شد.");
       } else {
         alert(res.error || "خطا در ذخیره اطلاعات مشتری");
@@ -287,7 +302,7 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
                     <User className="h-3.5 w-3.5 text-slate-500" />
                     همکار مسئول:
                   </span>
-                  <span className="text-slate-200">{c.employeeName || "تعیین نشده"}</span>
+                  <span className="text-slate-200">{getCustomerEmployeeName(c)}</span>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -448,14 +463,12 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">سقف اعتبار مالی (تومان):</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="مثال: 50000000"
+                  <label className="block text-slate-300 font-semibold mb-1">سقف اعتبار مالی:</label>
+                  <MoneyInput
                     value={formData.creditLimit}
-                    onChange={(e) => setFormData({ ...formData, creditLimit: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-white font-bold"
+                    onChange={(val) => setFormData({ ...formData, creditLimit: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
 
@@ -576,7 +589,7 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
               </div>
               <div className="bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
                 <span className="text-slate-400 block mb-1">همکار مسئول:</span>
-                <b className="text-white">{viewingProfile.employeeName || "—"}</b>
+                <b className="text-white">{getCustomerEmployeeName(viewingProfile)}</b>
               </div>
               <div className="bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
                 <span className="text-slate-400 block mb-1">سقف اعتبار:</span>

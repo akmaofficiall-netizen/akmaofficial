@@ -51,6 +51,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       success: true,
       customer: {
         ...customer.customer,
+        employeeName: customer.employeeName || "بدون ویزیتور",
         assignedEmployeeName: customer.employeeName || "بدون ویزیتور",
         latitude: Number(customer.customer.latitude),
         longitude: Number(customer.customer.longitude),

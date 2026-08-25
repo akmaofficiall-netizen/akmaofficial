@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import {
   ShoppingBag,
   Plus,
@@ -411,13 +412,12 @@ export const ProductsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">قیمت پایه (تومان) *</label>
-                  <input
-                    type="number"
-                    required
+                  <label className="block text-slate-400 mb-1">قیمت پایه *</label>
+                  <MoneyInput
                     value={formData.basePrice}
-                    onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-bold text-emerald-400"
+                    onChange={(val) => setFormData({ ...formData, basePrice: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
               </div>
@@ -573,13 +573,12 @@ export const ProductsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">قیمت پایه (تومان) *</label>
-                  <input
-                    type="number"
+                  <label className="block text-slate-400 mb-1">قیمت پایه *</label>
+                  <MoneyInput
                     value={formData.basePrice}
-                    onChange={(e) => setFormData({ ...formData, basePrice: Number(e.target.value) })}
-                    placeholder="قیمت"
-                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-bold text-emerald-400"
+                    onChange={(val) => setFormData({ ...formData, basePrice: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
               </div>
@@ -783,13 +782,12 @@ export const ProductsView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">قیمت اختصاصی برای این پروژه (تومان) *</label>
-                <input
-                  type="number"
-                  required
+                <label className="block text-slate-400 mb-1">قیمت اختصاصی برای این پروژه *</label>
+                <MoneyInput
                   value={customProjectPrice}
-                  onChange={(e) => setCustomPrice(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-bold text-base text-blue-400"
+                  onChange={(val) => setCustomPrice(val)}
+                  className="w-full text-xs py-2"
+                  unit="تومان"
                 />
               </div>
 

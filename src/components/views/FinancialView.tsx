@@ -26,6 +26,7 @@ import {
   Layers,
 } from "lucide-react";
 import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 interface AccountItem {
   id: string;
@@ -852,15 +853,13 @@ export const FinancialView: React.FC = () => {
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  موجودی فعلی / اولیه (تومان) <span className="text-rose-400">*</span>
+                  موجودی فعلی / اولیه <span className="text-rose-400">*</span>
                 </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="موجودی به تومان"
-                  value={accountForm.balance || ""}
-                  onChange={(e) => setAccountForm({ ...accountForm, balance: Number(e.target.value) })}
-                  className="w-full rounded-xl bg-slate-900 border border-slate-700 p-2.5 text-emerald-400 font-bold font-mono focus:border-blue-500 focus:outline-none"
+                <MoneyInput
+                  value={accountForm.balance}
+                  onChange={(val) => setAccountForm({ ...accountForm, balance: val })}
+                  className="w-full text-xs py-2"
+                  unit="تومان"
                 />
               </div>
 
@@ -937,16 +936,13 @@ export const FinancialView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">
-                    مبلغ هزینه (تومان) <span className="text-rose-400">*</span>
+                    مبلغ هزینه <span className="text-rose-400">*</span>
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    placeholder="مبلغ به تومان"
-                    value={expenseForm.amount || ""}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, amount: Number(e.target.value) })}
-                    className="w-full rounded-xl bg-slate-900 border border-slate-700 p-2.5 text-rose-300 font-bold"
+                  <MoneyInput
+                    value={expenseForm.amount}
+                    onChange={(val) => setExpenseForm({ ...expenseForm, amount: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
 

@@ -27,6 +27,7 @@ export async function GET(req: Request) {
 
     const formatted = list.map(({ customer, employeeName }) => ({
       ...customer,
+      employeeName: employeeName || "بدون ویزیتور",
       assignedEmployeeName: employeeName || "بدون ویزیتور",
       latitude: Number(customer.latitude),
       longitude: Number(customer.longitude),

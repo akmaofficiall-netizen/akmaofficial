@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toJalaliDate, formatMoney, formatNumber, formatRial } from "@/lib/dateUtils";
 import { parsePersianError } from "@/lib/errorUtils";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [batches, setBatches] = useState<any[]>([]);
@@ -269,30 +270,30 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">هزینه دستمزد (تومان)</label>
-                  <input
-                    type="number"
+                  <label className="block text-slate-400 mb-1">هزینه دستمزد</label>
+                  <MoneyInput
                     value={form.laborCost}
-                    onChange={(e) => setForm({ ...form, laborCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+                    onChange={(val) => setForm({ ...form, laborCost: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">هزینه سربار (تومان)</label>
-                  <input
-                    type="number"
+                  <label className="block text-slate-400 mb-1">هزینه سربار</label>
+                  <MoneyInput
                     value={form.overheadCost}
-                    onChange={(e) => setForm({ ...form, overheadCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+                    onChange={(val) => setForm({ ...form, overheadCost: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">هزینه بسته‌بندی (تومان)</label>
-                  <input
-                    type="number"
+                  <label className="block text-slate-400 mb-1">هزینه بسته‌بندی</label>
+                  <MoneyInput
                     value={form.packagingCost}
-                    onChange={(e) => setForm({ ...form, packagingCost: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+                    onChange={(val) => setForm({ ...form, packagingCost: val })}
+                    className="w-full text-xs py-2"
+                    unit="تومان"
                   />
                 </div>
               </div>
