@@ -112,8 +112,8 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
         latitude: customer.latitude ? Number(customer.latitude) : null,
         longitude: customer.longitude ? Number(customer.longitude) : null,
         assignedEmployeeId: customer.assignedEmployeeId || "",
-        creditLimit: Number(customer.creditLimit) || 0,
-        settlementTermDays: Number(customer.settlementTermDays) || 30,
+        creditLimit: Number(customer.creditLimit || 0),
+        settlementTermDays: Number(customer.paymentTermsDays || customer.settlementTermDays || 30),
         notes: customer.notes || "",
       });
     } else {
@@ -155,6 +155,7 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          paymentTermsDays: formData.settlementTermDays,
           projectId: selectedProjectId || undefined,
         }),
       }).then((r) => r.json());

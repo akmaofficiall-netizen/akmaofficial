@@ -86,14 +86,19 @@ export async function createRawMaterial(input: CreateRawMaterialInput) {
     })
     .returning();
 
-  // Initial Price History entry
-  await db.insert(rawMaterialPriceHistory).values({
-    rawMaterialId: rm.id,
-    oldCost: "0",
-    newCost: cost.toString(),
-    changePercent: "100",
-    reason: "قیمت اولیه",
-  });
+  // Initial Price History entry with safe numeric strings
+  try {
+    const costNum = Number(cost) || 0;
+    await db.insert(rawMaterialPriceHistory).values({
+      rawMaterialId: rm.id,
+      oldCost: "0.00",
+      newCost: costNum.toFixed(2),
+      changePercent: costNum > 0 ? "100.00" : "0.00",
+      reason: "قیمت اولیه",
+    });
+  } catch (histErr) {
+    console.error("Warning: could not insert initial raw material price history:", histErr);
+  }
 
   await logAuditEvent("CREATE", "raw_material", rm.id, { name: rm.name, code: rm.code, cost });
   return rm;
@@ -172,13 +177,17 @@ export async function updateRawMaterial(id: string, input: UpdateRawMaterialInpu
     const changePercent = oldCost > 0 ? Math.round(((newCost - oldCost) / oldCost) * 10000) / 100 : 100;
 
     // Save Price History Record
-    await db.insert(rawMaterialPriceHistory).values({
-      rawMaterialId: id,
-      oldCost: oldCost.toString(),
-      newCost: newCost.toString(),
-      changePercent: changePercent.toString(),
-      reason: input.priceChangeReason || "ویرایش قیمت دستی",
-    });
+    try {
+      await db.insert(rawMaterialPriceHistory).values({
+        rawMaterialId: id,
+        oldCost: oldCost.toFixed(2),
+        newCost: newCost.toFixed(2),
+        changePercent: changePercent.toFixed(2),
+        reason: input.priceChangeReason || "ویرایش قیمت دستی",
+      });
+    } catch (histErr) {
+      console.error("Warning: could not insert raw material update price history:", histErr);
+    }
   }
 
   const [updated] = await db

@@ -67,17 +67,35 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    if (context && !context.permissions.has("*")) {
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
+
+    if (!isManagerOrAdmin && context) {
       const [customer] = await db.select({ assignedEmployeeId: customers.assignedEmployeeId }).from(customers).where(eq(customers.id, body.customerId)).limit(1);
-      if (!customer) return NextResponse.json({ success:false, error:"مشتری یافت نشد" }, { status:404 });
-      if (customer.assignedEmployeeId !== context.employeeId) return NextResponse.json({ success:false, error:"این مشتری متعلق به شما نیست" }, { status:403 });
+      if (!customer) return NextResponse.json({ success: false, error: "مشتری یافت نشد" }, { status: 404 });
+      if (customer.assignedEmployeeId && customer.assignedEmployeeId !== context.employeeId) {
+        return NextResponse.json({ success: false, error: "این مشتری متعلق به همکار دیگری است" }, { status: 403 });
+      }
+    }
+
+    // Determine employeeId:
+    // 1. If explicit employeeId is sent in body, use it!
+    // 2. If current user is a restricted salesperson, use context.employeeId.
+    // 3. Otherwise fallback to customer's assigned visitor or null (direct sale).
+    let finalEmployeeId: string | null = null;
+    if (body.employeeId !== undefined && body.employeeId !== null && body.employeeId !== "") {
+      finalEmployeeId = body.employeeId;
+    } else if (context && context.employeeId && context.employeeId !== "admin" && !isManagerOrAdmin) {
+      finalEmployeeId = context.employeeId;
+    } else {
+      const [customer] = await db.select({ assignedEmployeeId: customers.assignedEmployeeId }).from(customers).where(eq(customers.id, body.customerId)).limit(1);
+      finalEmployeeId = customer?.assignedEmployeeId || null;
     }
 
     const created = await createInvoice({
       customerId: body.customerId,
       projectId: body.projectId || null,
       salesMode: body.salesMode || "direct",
-      employeeId: context?.employeeId || body.employeeId || null,
+      employeeId: finalEmployeeId,
       intermediaryEmployeeId: body.intermediaryEmployeeId || null,
       invoiceDiscount: body.invoiceDiscount ? Number(body.invoiceDiscount) : 0,
       taxTotal: body.taxTotal ? Number(body.taxTotal) : 0,

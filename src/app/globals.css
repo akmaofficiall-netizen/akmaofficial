@@ -35,3 +35,48 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Dedicated Print Styles for Official Factor */
+@media print {
+  body, html {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    background-image: none !important;
+  }
+
+  /* Hide entire application shell and modal chrome */
+  header, nav, aside, footer, button, select, input, .no-print, [role="dialog"] > div > div:first-child, [role="dialog"] > div > div:last-child {
+    display: none !important;
+  }
+
+  /* Hide everything on the body except the printable factor container */
+  body * {
+    visibility: hidden;
+  }
+
+  #persian-official-invoice,
+  #persian-official-invoice * {
+    visibility: visible !important;
+  }
+
+  #persian-official-invoice {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 8mm 10mm !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    min-height: auto !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 6mm;
+  }
+}
+

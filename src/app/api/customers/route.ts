@@ -18,7 +18,10 @@ export async function GET(req: Request) {
       .leftJoin(employees, eq(customers.assignedEmployeeId, employees.id))
       .orderBy(desc(customers.createdAt));
     const context = await getEmployeeContext();
-    if (context) list = list.filter((row) => row.customer.assignedEmployeeId === context.employeeId);
+    // Only filter to own customers if the user is a restricted salesperson/visitor without admin/manager roles
+    if (context && !context.permissions.has("*") && context.roleCode !== "admin" && context.roleCode !== "manager" && !context.permissions.has("customers.manage")) {
+      list = list.filter((row) => row.customer.assignedEmployeeId === context.employeeId);
+    }
     const projectId = new URL(req.url).searchParams.get("projectId");
     if (projectId) { const ids = await db.select({customerId: customerProjectMemberships.customerId}).from(customerProjectMemberships).where(eq(customerProjectMemberships.projectId, projectId)); const set = new Set(ids.map(x=>x.customerId)); list = list.filter(row=>set.has(row.customer.id)); }
 
@@ -27,7 +30,8 @@ export async function GET(req: Request) {
       assignedEmployeeName: employeeName || "بدون ویزیتور",
       latitude: Number(customer.latitude),
       longitude: Number(customer.longitude),
-      creditLimit: Number(customer.creditLimit),
+      creditLimit: Number(customer.creditLimit || 0),
+      paymentTermsDays: Number(customer.paymentTermsDays || 30),
     }));
 
     return NextResponse.json({ success: true, customers: formatted });
@@ -46,6 +50,9 @@ export async function POST(req: Request) {
 
     const code = body.code || `CUST-${Date.now().toString().slice(-8)}`;
 
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("customers.manage") || context.permissions.has("customers.transfer");
+    const assignedEmployeeId = isManagerOrAdmin ? (body.assignedEmployeeId || null) : (context?.employeeId || null);
+
     const [created] = await db
       .insert(customers)
       .values({
@@ -59,18 +66,20 @@ export async function POST(req: Request) {
         city: body.city || "تهران",
         latitude: body.latitude ? body.latitude.toString() : "35.6892",
         longitude: body.longitude ? body.longitude.toString() : "51.3890",
-        assignedEmployeeId: context?.permissions.has("*") || context?.permissions.has("customers.transfer") ? (body.assignedEmployeeId || context?.employeeId || null) : (context?.employeeId || null),
+        creditLimit: body.creditLimit !== undefined ? Number(body.creditLimit).toString() : "0",
+        paymentTermsDays: body.paymentTermsDays !== undefined ? Number(body.paymentTermsDays) : (body.settlementTermDays !== undefined ? Number(body.settlementTermDays) : 30),
+        assignedEmployeeId,
         notes: body.notes || null,
       })
       .returning();
 
     await recalculateCustomerHealth(created.id);
-    if (context?.employeeId) {
+    if (assignedEmployeeId) {
       const projectId = body.projectId || null;
       const { assignCustomer } = await import("@/services/partner");
-      await assignCustomer(created.id, context.employeeId, projectId, "employee_created", context.employeeId);
+      await assignCustomer(created.id, assignedEmployeeId, projectId, "employee_created", context?.employeeId || assignedEmployeeId);
     }
-    await logAuditEvent("CREATE", "customer", created.id, { name: created.name, mobile: created.mobile, employeeId: context?.employeeId || null, projectId: body.projectId || null });
+    await logAuditEvent("CREATE", "customer", created.id, { name: created.name, mobile: created.mobile, employeeId: assignedEmployeeId, projectId: body.projectId || null });
 
     return NextResponse.json({ success: true, customer: created });
   } catch (error: any) {

@@ -337,3 +337,203 @@ export async function reverseInvoice(invoiceId: string, reason: string) {
 
   return updated;
 }
+
+/**
+ * Update an existing invoice (Audited and full field support)
+ */
+export async function updateInvoice(
+  invoiceId: string,
+  input: {
+    customerId?: string;
+    employeeId?: string | null;
+    projectId?: string | null;
+    manualInvoiceNumber?: string;
+    invoiceDate?: Date;
+    dueDate?: Date;
+    notes?: string | null;
+    invoiceDiscount?: number;
+    paymentStatus?: "unpaid" | "partial" | "paid";
+    items?: CreateInvoiceItemInput[];
+  }
+) {
+  const [existing] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!existing) throw new Error("فاکتور پیدا نشد");
+
+  const patch: any = { updatedAt: new Date() };
+
+  if (input.customerId !== undefined && input.customerId !== existing.customerId) {
+    const [c] = await db.select().from(customers).where(eq(customers.id, input.customerId)).limit(1);
+    if (!c) throw new Error("مشتری جدید پیدا نشد");
+    patch.customerId = input.customerId;
+  }
+
+  if (input.employeeId !== undefined) {
+    patch.employeeId = input.employeeId || null;
+    // Update commission attribution if employee changed
+    if (input.employeeId !== existing.employeeId) {
+      if (input.employeeId) {
+        await db
+          .update(commissionLedger)
+          .set({
+            employeeId: input.employeeId,
+            recipientEmployeeId: input.employeeId,
+          })
+          .where(eq(commissionLedger.invoiceId, invoiceId));
+      } else {
+        await db
+          .delete(commissionLedger)
+          .where(eq(commissionLedger.invoiceId, invoiceId));
+      }
+    }
+  }
+
+  if (input.projectId !== undefined) patch.projectId = input.projectId || null;
+  if (input.manualInvoiceNumber !== undefined && input.manualInvoiceNumber.trim()) {
+    patch.invoiceNumber = input.manualInvoiceNumber.trim();
+  }
+  if (input.invoiceDate !== undefined) patch.invoiceDate = input.invoiceDate;
+  if (input.dueDate !== undefined) patch.dueDate = input.dueDate;
+  if (input.notes !== undefined) patch.notes = input.notes || null;
+  if (input.paymentStatus !== undefined) patch.paymentStatus = input.paymentStatus;
+
+  // If items are updated, recalculate line items and totals
+  if (input.items && Array.isArray(input.items) && input.items.length > 0) {
+    // 1. Revert previous inventory items
+    const oldItems = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+    for (const oldItem of oldItems) {
+      await recordInventoryTransaction({
+        itemType: "product",
+        itemId: oldItem.productId,
+        transactionType: "sales_return",
+        quantityChange: Number(oldItem.quantity),
+        unitCostSnapshot: Number(oldItem.unitCostSnapshot),
+        referenceType: "invoice_update",
+        referenceId: invoiceId,
+        projectId: patch.projectId ?? existing.projectId,
+        notes: `اصلاح اقلام فاکتور #${existing.invoiceNumber}`,
+      });
+    }
+
+    // 2. Delete old invoice items
+    await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+
+    // 3. Process new items
+    let subtotal = 0;
+    let lineDiscountsTotal = 0;
+    let cogsTotal = 0;
+    const processedItems = [];
+
+    const effectiveProjectId = patch.projectId !== undefined ? patch.projectId : existing.projectId;
+
+    for (const itemInput of input.items) {
+      const [product] = await db.select().from(products).where(eq(products.id, itemInput.productId)).limit(1);
+      if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
+
+      const resolvedPrice = await resolveProductPrice(product.id, effectiveProjectId);
+      const unitPrice = itemInput.unitPrice !== undefined ? itemInput.unitPrice : resolvedPrice.effectivePrice;
+      const unitCost = Number(product.calculatedCost) || Number(product.basePrice) * 0.7 || 0;
+      const qty = itemInput.quantity;
+      const disc = itemInput.discountAmount || 0;
+
+      const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+      const lineCogs = Math.round(qty * unitCost * 100) / 100;
+      const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+
+      subtotal += qty * unitPrice;
+      lineDiscountsTotal += disc;
+      cogsTotal += lineCogs;
+
+      processedItems.push({
+        productId: product.id,
+        productNameSnapshot: product.name,
+        quantity: qty,
+        unitPrice,
+        unitCostSnapshot: unitCost,
+        discountAmount: disc,
+        lineTotal,
+        lineCogs,
+        lineProfit,
+      });
+    }
+
+    const invoiceDiscount = input.invoiceDiscount !== undefined ? input.invoiceDiscount : Number(existing.invoiceDiscount) || 0;
+    const taxTotal = Number(existing.taxTotal) || 0;
+    const grandTotal = Math.max(0, subtotal - lineDiscountsTotal - invoiceDiscount + taxTotal);
+    const grossProfitTotal = grandTotal - cogsTotal;
+    const paidAmount = Number(existing.paidAmount) || 0;
+    const balanceDue = Math.max(0, grandTotal - paidAmount);
+
+    let paymentStatus: "unpaid" | "partial" | "paid" = "unpaid";
+    if (paidAmount >= grandTotal && grandTotal > 0) {
+      paymentStatus = "paid";
+    } else if (paidAmount > 0) {
+      paymentStatus = "partial";
+    }
+
+    patch.subtotal = subtotal.toString();
+    patch.lineDiscountsTotal = lineDiscountsTotal.toString();
+    patch.invoiceDiscount = invoiceDiscount.toString();
+    patch.grandTotal = grandTotal.toString();
+    patch.cogsTotal = cogsTotal.toString();
+    patch.grossProfitTotal = grossProfitTotal.toString();
+    patch.balanceDue = balanceDue.toString();
+    patch.paymentStatus = paymentStatus;
+
+    // Insert new invoice items & inventory out
+    for (const item of processedItems) {
+      await db.insert(invoiceItems).values({
+        invoiceId,
+        productId: item.productId,
+        productNameSnapshot: item.productNameSnapshot,
+        quantity: item.quantity.toString(),
+        unitPrice: item.unitPrice.toString(),
+        unitCostSnapshot: item.unitCostSnapshot.toString(),
+        discountAmount: item.discountAmount.toString(),
+        lineTotal: item.lineTotal.toString(),
+        lineCogs: item.lineCogs.toString(),
+        lineProfit: item.lineProfit.toString(),
+      });
+
+      await recordInventoryTransaction({
+        itemType: "product",
+        itemId: item.productId,
+        transactionType: "sale",
+        quantityChange: -item.quantity,
+        unitCostSnapshot: item.unitCostSnapshot,
+        referenceType: "invoice_update",
+        referenceId: invoiceId,
+        projectId: effectiveProjectId,
+        notes: `فروش اصلاح شده فاکتور #${patch.invoiceNumber || existing.invoiceNumber}`,
+      });
+    }
+  } else if (input.invoiceDiscount !== undefined) {
+    const subtotal = Number(existing.subtotal) || 0;
+    const lineDiscountsTotal = Number(existing.lineDiscountsTotal) || 0;
+    const taxTotal = Number(existing.taxTotal) || 0;
+    const grandTotal = Math.max(0, subtotal - lineDiscountsTotal - input.invoiceDiscount + taxTotal);
+    const paidAmount = Number(existing.paidAmount) || 0;
+    const balanceDue = Math.max(0, grandTotal - paidAmount);
+
+    patch.invoiceDiscount = input.invoiceDiscount.toString();
+    patch.grandTotal = grandTotal.toString();
+    patch.balanceDue = balanceDue.toString();
+  }
+
+  const [updated] = await db
+    .update(invoices)
+    .set(patch)
+    .where(eq(invoices.id, invoiceId))
+    .returning();
+
+  if (patch.customerId || existing.customerId) {
+    await recalculateCustomerHealth(patch.customerId || existing.customerId);
+  }
+
+  await logAuditEvent("UPDATE", "invoice", invoiceId, {
+    fields: Object.keys(patch),
+    employeeId: patch.employeeId ?? existing.employeeId,
+    grandTotal: patch.grandTotal ?? existing.grandTotal,
+  });
+
+  return updated;
+}

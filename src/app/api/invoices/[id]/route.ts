@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { invoices, invoiceItems, customers, projects, employees, products, payments } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { reverseInvoice } from "@/services/invoice";
+import { reverseInvoice, updateInvoice } from "@/services/invoice";
 import { requirePermission } from "@/services/access";
 import { logAuditEvent } from "@/services/audit";
 
@@ -31,7 +31,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!inv) {
       return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
     }
-    if (context && inv.invoice.employeeId !== context.employeeId) {
+
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
+    if (!isManagerOrAdmin && context && inv.invoice.employeeId !== context.employeeId) {
       return NextResponse.json({ success: false, error: "دسترسی به این فاکتور مجاز نیست" }, { status: 403 });
     }
 
@@ -88,7 +90,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const context = await requirePermission(body.action === "reverse" ? "invoices.update" : "invoices.update");
     const [existing] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     if (!existing) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
-    if (context && existing.employeeId !== context.employeeId) return NextResponse.json({ success: false, error: "دسترسی به این فاکتور مجاز نیست" }, { status: 403 });
+
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
+    if (!isManagerOrAdmin && context && existing.employeeId !== context.employeeId) {
+      return NextResponse.json({ success: false, error: "دسترسی به این فاکتور مجاز نیست" }, { status: 403 });
+    }
 
     if (body.action === "reverse") {
       const reversed = await reverseInvoice(id, body.reason || "ابطال توسط کاربر");
@@ -101,7 +107,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
-
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -109,26 +114,27 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const context = await requirePermission("invoices.update", body.projectId || null);
     const [existing] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     if (!existing) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
-    if (context && existing.employeeId !== context.employeeId) return NextResponse.json({ success: false, error: "دسترسی به این فاکتور مجاز نیست" }, { status: 403 });
 
-    const patch: any = { updatedAt: new Date() };
-    if (body.notes !== undefined) patch.notes = body.notes || null;
-    if (body.dueDate !== undefined) patch.dueDate = body.dueDate ? new Date(body.dueDate) : null;
-    if (body.invoiceDate !== undefined) patch.invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : existing.invoiceDate;
-    if (body.paymentStatus !== undefined) {
-      const next = String(body.paymentStatus);
-      if (!["unpaid","partial","paid"].includes(next)) return NextResponse.json({ success:false, error:"وضعیت پرداخت نامعتبر است" }, {status:400});
-      if (next === "paid") {
-        if (Number(existing.balanceDue) > 0) return NextResponse.json({ success:false, error:"برای ثبت پرداخت کامل از بخش پرداخت استفاده کنید تا سند مالی ثبت شود." }, {status:400});
-      } else if (next === "unpaid" && Number(existing.paidAmount) > 0) {
-        return NextResponse.json({ success:false, error:"این فاکتور قبلاً پرداخت داشته است؛ برای برگشت پرداخت باید تراکنش پرداخت اصلاح شود." }, {status:400});
-      }
-      patch.paymentStatus = next;
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
+    if (!isManagerOrAdmin && context && existing.employeeId !== context.employeeId) {
+      return NextResponse.json({ success: false, error: "دسترسی به ویرایش این فاکتور مجاز نیست" }, { status: 403 });
     }
-    const [updated] = await db.update(invoices).set(patch).where(eq(invoices.id, id)).returning();
-    await logAuditEvent("UPDATE", "invoice", id, { fields: Object.keys(patch), paymentStatus: patch.paymentStatus ?? existing.paymentStatus });
-    return NextResponse.json({ success:true, invoice: updated });
+
+    const updated = await updateInvoice(id, {
+      customerId: body.customerId,
+      employeeId: body.employeeId !== undefined ? (body.employeeId || null) : undefined,
+      projectId: body.projectId !== undefined ? (body.projectId || null) : undefined,
+      manualInvoiceNumber: body.manualInvoiceNumber || body.invoiceNumber,
+      invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : undefined,
+      dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+      notes: body.notes,
+      invoiceDiscount: body.invoiceDiscount !== undefined ? Number(body.invoiceDiscount) : undefined,
+      paymentStatus: body.paymentStatus,
+      items: body.items,
+    });
+
+    return NextResponse.json({ success: true, invoice: updated });
   } catch (error: any) {
-    return NextResponse.json({ success:false, error:error.message }, {status:500});
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
