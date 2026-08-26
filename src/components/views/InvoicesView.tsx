@@ -56,6 +56,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   const [downloadingJpg, setDownloadingJpg] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
   const [editingFullInvoice, setEditingFullInvoice] = useState<any | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
     id: "",
     invoiceNumber: "",
@@ -396,6 +397,28 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     }
   };
 
+  const handleDeleteInvoice = async () => {
+    if (!deletingInvoice) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/invoices/${deletingInvoice.id}`, {
+        method: "DELETE",
+      }).then((r) => r.json());
+
+      if (res.success) {
+        setDeletingInvoice(null);
+        await fetchData();
+      } else {
+        alert(res.error || "خطا در حذف فاکتور");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openEditInvoice = async (inv: any) => {
     const res = await fetch(`/api/invoices/${inv.id}`).then((r) => r.json());
     if (!res.success) return alert(res.error || "خطا در بارگذاری فاکتور");
@@ -692,11 +715,18 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                               setReversalReason("");
                             }}
                             title="ابطال فاکتور و بازگردانی انبار"
-                            className="rounded-xl border border-slate-800 bg-slate-950 p-2 text-rose-400 hover:text-rose-300 hover:border-rose-500 transition"
+                            className="rounded-xl border border-slate-800 bg-slate-950 p-2 text-amber-400 hover:text-amber-300 hover:border-amber-500 transition"
                           >
                             <RotateCcw className="h-4 w-4" />
                           </button>
                         )}
+                        <button
+                          onClick={() => setDeletingInvoice(inv)}
+                          title="حذف فاکتور و بازگردانی انبار"
+                          className="rounded-xl border border-slate-800 bg-slate-950 p-2 text-rose-500 hover:text-rose-400 hover:border-rose-600 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1027,6 +1057,56 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2.5: Delete Invoice Confirmation */}
+      {deletingInvoice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeletingInvoice(null);
+          }}
+        >
+          <div className="w-full max-w-md rounded-3xl border border-rose-900/50 bg-slate-950 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Trash2 className="h-5 w-5 text-rose-500" />
+                حذف دائم فاکتور #{deletingInvoice.invoiceNumber}
+              </h3>
+              <button onClick={() => setDeletingInvoice(null)} className="text-slate-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl border border-rose-500/30 bg-rose-950/40 text-xs text-rose-300 leading-relaxed space-y-2">
+              <p className="font-bold">آیا از حذف دائم این فاکتور اطمینان دارید؟</p>
+              <p>
+                مبلغ فاکتور: {formatMoney(deletingInvoice.grandTotal)} | خریدار: {deletingInvoice.customerName}
+              </p>
+              <p className="text-[11px] text-rose-400">
+                توجه: اقلام فاکتور به موجودی انبار بازگردانده شده و سوابق مالی و پورسانت متصل به این فاکتور لغو خواهد شد.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletingInvoice(null)}
+                className="rounded-2xl border border-slate-800 px-4 py-2.5 text-xs text-slate-400 hover:text-white"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleDeleteInvoice}
+                className="rounded-2xl bg-rose-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-rose-600/30 hover:bg-rose-500"
+              >
+                {saving ? "در حال حذف..." : "تأیید و حذف فاکتور"}
+              </button>
+            </div>
           </div>
         </div>
       )}

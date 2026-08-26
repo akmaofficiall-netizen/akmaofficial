@@ -18,6 +18,12 @@ import {
   Users,
   X,
   Phone,
+  Wallet,
+  CreditCard,
+  ArrowDownRight,
+  ArrowUpRight,
+  Receipt,
+  Coins,
   Briefcase,
   Edit3
 } from "lucide-react";
@@ -56,6 +62,19 @@ export const EmployeesView: React.FC = () => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [commissions, setCommissions] = useState<any[]>([]);
+  const [commissionSummary, setCommissionSummary] = useState({ totalEarned: 0, totalPaid: 0, balancePending: 0 });
+  const [financialAccounts, setFinancialAccounts] = useState<any[]>([]);
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [payoutForm, setPayoutForm] = useState({
+    amount: 0,
+    accountId: "",
+    paymentMethod: "bank_transfer",
+    referenceNumber: "",
+    notes: "",
+    projectId: "",
+  });
+  const [payoutSaving, setPayoutSaving] = useState(false);
+  const [payoutError, setPayoutError] = useState("");
   const [openItems, setOpenItems] = useState<any>({ customers: [], tasks: [], invoices: [], commissions: [], consignments: [] });
   const [permissionData, setPermissionData] = useState<any>({ permissions: [], projects: [], account: null });
   const [permissionProjectId, setPermissionProjectId] = useState("");
@@ -157,7 +176,11 @@ export const EmployeesView: React.FC = () => {
       if (pr.success) setProfile(pr);
       if (c.success) setCustomers(c.customers || []);
       if (s.success) setSales(s.sales || []);
-      if (cm.success) setCommissions(cm.commissions || []);
+      if (cm.success) {
+        setCommissions(cm.commissions || []);
+        if (cm.summary) setCommissionSummary(cm.summary);
+        if (cm.accounts) setFinancialAccounts(cm.accounts || []);
+      }
       if (oi.success) setOpenItems(oi.openItems || {});
       if (prjRes.success) setProjects(prjRes.projects || []);
 
@@ -306,6 +329,64 @@ export const EmployeesView: React.FC = () => {
     }).then((x) => x.json());
     if (!r.success) return alert(r.error);
     alert("سطوح دسترسی همکار برای پروژه با موفقیت ذخیره گردید.");
+  };
+
+  const loadCommissions = async (empId: string) => {
+    try {
+      const res = await fetch(`/api/employees/${empId}/commissions`).then((r) => r.json());
+      if (res.success) {
+        setCommissions(res.commissions || []);
+        if (res.summary) setCommissionSummary(res.summary);
+        if (res.accounts) setFinancialAccounts(res.accounts || []);
+      }
+    } catch (err) {
+      console.error("Error loading commissions:", err);
+    }
+  };
+
+  const openPayoutModal = () => {
+    if (!selected) return;
+    const defaultAcc = financialAccounts[0]?.id || "";
+    setPayoutForm({
+      amount: commissionSummary.balancePending || 0,
+      accountId: defaultAcc,
+      paymentMethod: "bank_transfer",
+      referenceNumber: "",
+      notes: `تسویه پورسانت به ${selected.name}`,
+      projectId: selected.projectId || "",
+    });
+    setPayoutError("");
+    setShowPayoutModal(true);
+  };
+
+  const handleCommissionPayout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || payoutForm.amount <= 0 || !payoutForm.accountId) {
+      alert("مبلغ و حساب بانکی پرداختی الزامی هستند.");
+      return;
+    }
+
+    setPayoutSaving(true);
+    setPayoutError("");
+    try {
+      const res = await fetch(`/api/employees/${selected.id}/commissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payoutForm),
+      }).then((r) => r.json());
+
+      if (res.success) {
+        setShowPayoutModal(false);
+        await loadCommissions(selected.id);
+        alert(res.message || "پرداخت پورسانت با موفقیت ثبت شد و در هزینه‌ها درج گردید.");
+      } else {
+        setPayoutError(res.error || "خطا در ثبت پرداخت پورسانت");
+      }
+    } catch (err: any) {
+      setPayoutError(err.message || "خطا در برقراری ارتباط");
+    } finally {
+      setPayoutSaving(false);
+    }
   };
 
   const monthlySales = useMemo(() => {
@@ -704,34 +785,152 @@ export const EmployeesView: React.FC = () => {
             )}
 
             {tab === "commission" && (
-              <div className="overflow-auto rounded-2xl border border-slate-800">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-slate-400 bg-slate-900 border-b border-slate-800">
-                      <th className="p-3 text-right">مبلغ پورسانت</th>
-                      <th className="p-3 text-center">مبلغ مبنای فروش</th>
-                      <th className="p-3 text-center">وضعیت تسویه</th>
-                      <th className="p-3 text-center">تاریخ ثبت (شمسی)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {commissions.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-900/50">
-                        <td className="p-3 font-bold text-emerald-400">{formatMoney(c.commissionAmount)}</td>
-                        <td className="p-3 text-center text-slate-300">{formatMoney(c.baseAmount)}</td>
-                        <td className="p-3 text-center">{c.status === "paid" ? "تسویه شده" : "در انتظار تسویه"}</td>
-                        <td className="p-3 text-center text-slate-400">{toJalaliDate(c.createdAt)}</td>
+              <div className="space-y-4">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/30 p-4">
+                    <div className="flex items-center justify-between text-xs text-emerald-400 font-semibold">
+                      <span>کل پورسانت کسب‌شده</span>
+                      <Coins className="h-4 w-4" />
+                    </div>
+                    <div className="text-lg font-black text-emerald-300 font-mono mt-1">
+                      {formatMoney(commissionSummary.totalEarned)}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">ناشی از فاکتورهای فروش</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-purple-500/20 bg-purple-950/30 p-4">
+                    <div className="flex items-center justify-between text-xs text-purple-400 font-semibold">
+                      <span>کل پورسانت‌های پرداخت‌شده</span>
+                      <Receipt className="h-4 w-4" />
+                    </div>
+                    <div className="text-lg font-black text-purple-300 font-mono mt-1">
+                      {formatMoney(commissionSummary.totalPaid)}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">ثبت شده در هزینه‌های سیستم</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/30 p-4">
+                    <div className="flex items-center justify-between text-xs text-cyan-400 font-semibold">
+                      <span>مانده پورسانت قابل پرداخت</span>
+                      <Wallet className="h-4 w-4" />
+                    </div>
+                    <div className="text-lg font-black text-cyan-300 font-mono mt-1">
+                      {formatMoney(commissionSummary.balancePending)}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">طلب همکار از مجموعه</div>
+                  </div>
+                </div>
+
+                {/* Header Action */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl">
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-emerald-400" />
+                      دفتر سوابق پورسانت و تسویه‌حساب‌های مالی همکار
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      پرداخت پورسانت به صورت خودکار سند هزینه صادر کرده و از موجودی حساب بانکی کسر می‌کند.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openPayoutModal}
+                    className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 hover:opacity-95 transition flex items-center gap-1.5 shrink-0"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    <span>ثبت پرداخت / تسویه پورسانت</span>
+                  </button>
+                </div>
+
+                {/* Commissions & Payouts Ledger Table */}
+                <div className="overflow-auto rounded-2xl border border-slate-800">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-slate-400 bg-slate-900 border-b border-slate-800">
+                        <th className="p-3 text-right">نوع تراکنش</th>
+                        <th className="p-3 text-right">مبلغ پورسانت / پرداختی</th>
+                        <th className="p-3 text-center">مبنا / شماره فاکتور</th>
+                        <th className="p-3 text-right">توضیحات و بابت</th>
+                        <th className="p-3 text-center">وضعیت</th>
+                        <th className="p-3 text-center">تاریخ ثبت (شمسی)</th>
                       </tr>
-                    ))}
-                    {commissions.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="p-6 text-center text-slate-500">
-                          پورسانتی ثبت نشده است.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {commissions.map((c) => {
+                        const isPayout = c.commissionType === "payout" || Number(c.commissionAmount) < 0;
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-900/50">
+                            <td className="p-3">
+                              {isPayout ? (
+                                <span className="inline-flex items-center gap-1 text-purple-300 font-bold bg-purple-950/60 border border-purple-500/30 px-2 py-0.5 rounded-lg text-[11px]">
+                                  <ArrowDownRight className="h-3.5 w-3.5 text-purple-400" />
+                                  پرداخت به همکار
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-lg text-[11px]">
+                                  <ArrowUpRight className="h-3.5 w-3.5 text-emerald-400" />
+                                  کسب پورسانت فروش
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 font-bold font-mono">
+                              {isPayout ? (
+                                <span className="text-purple-400">
+                                  - {formatMoney(Math.abs(Number(c.commissionAmount)))}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-400">
+                                  + {formatMoney(Number(c.commissionAmount))}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center text-slate-300 font-mono">
+                              {c.invoiceId ? (
+                                <span className="text-cyan-300">فاکتور</span>
+                              ) : c.baseAmount ? (
+                                formatMoney(c.baseAmount)
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-300 text-[11px]">
+                              <div>{c.notes || "—"}</div>
+                              {c.ruleSnapshot?.paymentNumber && (
+                                <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                                  سند پرداخت: {c.ruleSnapshot.paymentNumber}
+                                  {c.ruleSnapshot.accountName ? ` | ${c.ruleSnapshot.accountName}` : ""}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {c.status === "paid" ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-300 text-[10px] bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  تسویه شده
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-amber-300 text-[10px] bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/20">
+                                  <Clock3 className="h-3 w-3" />
+                                  در انتظار پرداخت
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center text-slate-400">
+                              {toJalaliDate(c.createdAt, { showTime: true })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {commissions.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-slate-500">
+                            هنوز هیچ پورسانت یا پرداختی برای این همکار ثبت نشده است.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -1329,6 +1528,147 @@ export const EmployeesView: React.FC = () => {
                 تأیید و انتقال پرونده‌ها
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Commission Payout */}
+      {showPayoutModal && selected && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowPayoutModal(false);
+          }}
+        >
+          <div className="w-full max-w-lg rounded-3xl bg-slate-950 border border-slate-800 p-6 space-y-5 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-emerald-950/60 border border-emerald-500/30 p-2 text-emerald-400">
+                  <Wallet className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">
+                    ثبت پرداخت پورسانت به {selected.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    مانده قابل پرداخت:{" "}
+                    <span className="font-bold text-emerald-400 font-mono">
+                      {formatMoney(commissionSummary.balancePending)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowPayoutModal(false)} className="text-slate-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {payoutError && (
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300 leading-relaxed">
+                {payoutError}
+              </div>
+            )}
+
+            <form onSubmit={handleCommissionPayout} className="space-y-4 text-xs">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-300 font-semibold">مبلغ پرداختی (تومان):</label>
+                  {commissionSummary.balancePending > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPayoutForm({ ...payoutForm, amount: commissionSummary.balancePending })}
+                      className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      <span>تسویه کامل کل مانده</span>
+                    </button>
+                  )}
+                </div>
+                <MoneyInput
+                  value={payoutForm.amount}
+                  onChange={(val) => setPayoutForm({ ...payoutForm, amount: val })}
+                  className="w-full text-sm"
+                  unit="تومان"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  حساب بانکی / صندوق پرداخت‌کننده:
+                </label>
+                <select
+                  value={payoutForm.accountId}
+                  onChange={(e) => setPayoutForm({ ...payoutForm, accountId: e.target.value })}
+                  className="w-full rounded-xl bg-slate-900 border border-slate-800 p-2.5 text-white"
+                  required
+                >
+                  <option value="">-- انتخاب حساب پرداخت --</option>
+                  {financialAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.bankName || "بانک"}) - موجودی فعلی: {formatMoney(a.balance)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  مبلغ پرداختی مستقیماً از موجودی این حساب کسر خواهد شد (موجودی نمی‌تواند منفی شود).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">روش پرداخت:</label>
+                  <select
+                    value={payoutForm.paymentMethod}
+                    onChange={(e) => setPayoutForm({ ...payoutForm, paymentMethod: e.target.value })}
+                    className="w-full rounded-xl bg-slate-900 border border-slate-800 p-2.5 text-white"
+                  >
+                    <option value="bank_transfer">حواله پایا / ساتنا</option>
+                    <option value="card_transfer">کارت به کارت</option>
+                    <option value="pos">دستگاه کارتخوان (POS)</option>
+                    <option value="cash">پرداخت نقدی</option>
+                    <option value="cheque">چک بانکی</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">شماره سند / کد پیگیری:</label>
+                  <input
+                    type="text"
+                    value={payoutForm.referenceNumber}
+                    onChange={(e) => setPayoutForm({ ...payoutForm, referenceNumber: e.target.value })}
+                    placeholder="مثال: ۱۲۳۴۵۶۷۸"
+                    className="w-full rounded-xl bg-slate-900 border border-slate-800 p-2.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">توضیحات و بابت:</label>
+                <input
+                  type="text"
+                  value={payoutForm.notes}
+                  onChange={(e) => setPayoutForm({ ...payoutForm, notes: e.target.value })}
+                  placeholder="بابت تسویه پورسانت ماه..."
+                  className="w-full rounded-xl bg-slate-900 border border-slate-800 p-2.5 text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowPayoutModal(false)}
+                  className="rounded-xl border border-slate-800 px-4 py-2.5 text-slate-400 hover:text-white"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  disabled={payoutSaving}
+                  className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 font-bold text-white shadow-lg shadow-emerald-600/30 hover:opacity-95 transition"
+                >
+                  {payoutSaving ? "در حال ثبت پرداخت..." : "تأیید و صدور سند پرداخت"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

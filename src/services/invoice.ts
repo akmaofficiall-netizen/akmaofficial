@@ -537,3 +537,57 @@ export async function updateInvoice(
 
   return updated;
 }
+
+/**
+ * Permanently deletes and removes an invoice, reverting inventory and commissions
+ */
+export async function deleteInvoice(invoiceId: string, reason?: string) {
+  const [existing] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!existing) {
+    throw new Error("فاکتور مورد نظر یافت نشد.");
+  }
+
+  // 1. If invoice was not cancelled/reversed, restore stock for products
+  if (existing.status !== "cancelled" && existing.status !== "reversed") {
+    const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+    for (const item of items) {
+      await recordInventoryTransaction({
+        itemType: "product",
+        itemId: item.productId,
+        transactionType: "adjustment",
+        quantityChange: Number(item.quantity), // Positive to restore stock
+        unitCostSnapshot: Number(item.unitCostSnapshot),
+        referenceType: "invoice_void",
+        referenceId: invoiceId,
+        projectId: existing.projectId || null,
+        notes: `بازگشت موجودی کالا بابت حذف فاکتور #${existing.invoiceNumber}`,
+      });
+    }
+  }
+
+  // 2. Void or remove linked commissions
+  await db
+    .update(commissionLedger)
+    .set({
+      status: "reversed",
+      notes: sql`COALESCE(notes, '') || ' (ابطال شده بابت حذف فاکتور)'`,
+    })
+    .where(eq(commissionLedger.invoiceId, invoiceId));
+
+  // 3. Delete invoice items, payment allocations, and the invoice
+  await db.delete(paymentAllocations).where(eq(paymentAllocations.invoiceId, invoiceId));
+  await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+  await db.delete(invoices).where(eq(invoices.id, invoiceId));
+
+  if (existing.customerId) {
+    await recalculateCustomerHealth(existing.customerId);
+  }
+
+  await logAuditEvent("DELETE", "invoice", invoiceId, {
+    invoiceNumber: existing.invoiceNumber,
+    grandTotal: existing.grandTotal,
+    reason: reason || "حذف مستقیم توسط مدیر",
+  });
+
+  return { success: true, message: `فاکتور #${existing.invoiceNumber} با موفقیت حذف گردید.` };
+}

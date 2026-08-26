@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import { parsePersianError } from "@/lib/errorUtils";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { toJalaliDate } from "@/lib/dateUtils";
 import {
   Package,
   Plus,
@@ -951,7 +952,7 @@ export const RawMaterialsView: React.FC = () => {
                 priceHistory.map((ph) => (
                   <div key={ph.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs space-y-1">
                     <div className="flex justify-between items-center text-slate-400">
-                      <span>{new Date(ph.createdAt).toLocaleDateString("fa-IR")}</span>
+                      <span>{toJalaliDate(ph.createdAt)}</span>
                       <span className="font-semibold text-purple-400">{ph.reason}</span>
                     </div>
                     <div className="flex justify-between items-center font-semibold pt-1">

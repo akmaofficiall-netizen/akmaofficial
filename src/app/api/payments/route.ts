@@ -58,16 +58,16 @@ export async function POST(req: Request) {
       if (amt <= 0) return NextResponse.json({ success:false, error:"مبلغ پرداخت نامعتبر است." }, {status:400});
       if (!body.customerId) body.customerId = invForPayment.customerId;
     }
-    if (context && body.invoiceId) {
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("payments.manage") || context.permissions.has("invoices.manage");
+    if (!isManagerOrAdmin && context && body.invoiceId) {
       const [ownedInvoice] = await db.select({ employeeId: invoices.employeeId, customerId: invoices.customerId, projectId: invoices.projectId }).from(invoices).where(eq(invoices.id, body.invoiceId)).limit(1);
       if (!ownedInvoice) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
-      if (ownedInvoice.employeeId !== context.employeeId) return NextResponse.json({ success: false, error: "این فاکتور متعلق به شما نیست" }, { status: 403 });
-    }
-    if (context && body.invoiceId) {
-      const [ownedInvoice] = await db.select({ employeeId: invoices.employeeId, customerId: invoices.customerId, projectId: invoices.projectId }).from(invoices).where(eq(invoices.id, body.invoiceId)).limit(1);
-      if (!ownedInvoice) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
-      if (ownedInvoice.employeeId !== context.employeeId) return NextResponse.json({ success: false, error: "این فاکتور متعلق به شما نیست" }, { status: 403 });
-      if (ownedInvoice.projectId && body.projectId && ownedInvoice.projectId !== body.projectId) return NextResponse.json({ success: false, error: "پروژه فاکتور و پرداخت یکسان نیست" }, { status: 400 });
+      if (ownedInvoice.employeeId && ownedInvoice.employeeId !== context.employeeId) {
+        return NextResponse.json({ success: false, error: "این فاکتور متعلق به شما نیست" }, { status: 403 });
+      }
+      if (ownedInvoice.projectId && body.projectId && ownedInvoice.projectId !== body.projectId) {
+        return NextResponse.json({ success: false, error: "پروژه فاکتور و پرداخت یکسان نیست" }, { status: 400 });
+      }
     }
 
     const [created] = await db

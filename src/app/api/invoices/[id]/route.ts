@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { invoices, invoiceItems, customers, projects, employees, products, payments } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { reverseInvoice, updateInvoice } from "@/services/invoice";
+import { reverseInvoice, updateInvoice, deleteInvoice } from "@/services/invoice";
 import { requirePermission } from "@/services/access";
 import { logAuditEvent } from "@/services/audit";
 
@@ -32,8 +32,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
     }
 
-    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
-    if (!isManagerOrAdmin && context && inv.invoice.employeeId !== context.employeeId) {
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage") || context.permissions.has("invoices.view");
+    if (!isManagerOrAdmin && context && inv.invoice.employeeId && inv.invoice.employeeId !== context.employeeId) {
       return NextResponse.json({ success: false, error: "دسترسی به این فاکتور مجاز نیست" }, { status: 403 });
     }
 
@@ -87,12 +87,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
     const body = await req.json();
-    const context = await requirePermission(body.action === "reverse" ? "invoices.update" : "invoices.update");
+    const context = await requirePermission("invoices.update");
     const [existing] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     if (!existing) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
 
-    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
-    if (!isManagerOrAdmin && context && existing.employeeId !== context.employeeId) {
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage") || context.permissions.has("invoices.update");
+    if (!isManagerOrAdmin && context && existing.employeeId && existing.employeeId !== context.employeeId) {
       return NextResponse.json({ success: false, error: "دسترسی به این فاکتور مجاز نیست" }, { status: 403 });
     }
 
@@ -101,7 +101,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ success: true, invoice: reversed });
     }
 
-    return NextResponse.json({ success: false, error: "عملیات نا معتبر" }, { status: 400 });
+    return NextResponse.json({ success: false, error: "عملیات نامعتبر" }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
@@ -115,8 +115,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const [existing] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     if (!existing) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
 
-    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage");
-    if (!isManagerOrAdmin && context && existing.employeeId !== context.employeeId) {
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage") || context.permissions.has("invoices.update");
+    if (!isManagerOrAdmin && context && existing.employeeId && existing.employeeId !== context.employeeId) {
       return NextResponse.json({ success: false, error: "دسترسی به ویرایش این فاکتور مجاز نیست" }, { status: 403 });
     }
 
@@ -134,6 +134,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
 
     return NextResponse.json({ success: true, invoice: updated });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const context = await requirePermission("invoices.delete");
+    const [existing] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+    if (!existing) return NextResponse.json({ success: false, error: "فاکتور یافت نشد" }, { status: 404 });
+
+    const isManagerOrAdmin = !context || context.permissions.has("*") || context.roleCode === "admin" || context.roleCode === "manager" || context.permissions.has("invoices.manage") || context.permissions.has("invoices.delete");
+    if (!isManagerOrAdmin && context && existing.employeeId && existing.employeeId !== context.employeeId) {
+      return NextResponse.json({ success: false, error: "دسترسی به حذف این فاکتور مجاز نیست" }, { status: 403 });
+    }
+
+    const result = await deleteInvoice(id, "حذف مستقیم فاکتور");
+    return NextResponse.json({ success: true, message: result.message });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
