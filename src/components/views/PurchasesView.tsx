@@ -31,6 +31,7 @@ export const PurchasesView: React.FC = () => {
 
   // Purchase Modal State
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<any | null>(null);
   const [purchaseSaving, setPurchaseSaving] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState({
     supplierId: "",
@@ -104,6 +105,7 @@ export const PurchasesView: React.FC = () => {
   }, [suppliers]);
 
   const openPurchaseModal = () => {
+    setEditingPurchase(null);
     setPurchaseForm({
       supplierId: suppliers[0]?.id || "",
       paidAmount: 0,
@@ -114,6 +116,63 @@ export const PurchasesView: React.FC = () => {
       notes: "",
     });
     setIsPurchaseModalOpen(true);
+  };
+
+  const openEditPurchase = async (p: any) => {
+    try {
+      const res = await fetch(`/api/purchases/${p.id}`).then((r) => r.json());
+      if (res.success && res.purchase) {
+        const pur = res.purchase;
+        setEditingPurchase(pur);
+        setPurchaseForm({
+          supplierId: pur.supplierId || "",
+          paidAmount: Number(pur.paidAmount) || 0,
+          items:
+            pur.items && pur.items.length > 0
+              ? pur.items.map((i: any) => ({
+                  itemId: i.itemId,
+                  quantity: Number(i.quantity) || 1,
+                  unitCost: Number(i.unitCost) || 0,
+                }))
+              : rawMaterials.length > 0
+              ? [{ itemId: rawMaterials[0].id, quantity: 1, unitCost: Number(rawMaterials[0].currentCost) || 0 }]
+              : [],
+          notes: pur.notes || "",
+        });
+        setIsPurchaseModalOpen(true);
+      } else {
+        alert(res.error || "خطا در دریافت اطلاعات فاکتور خرید");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور");
+    }
+  };
+
+  const handleDeletePurchase = async (p: any) => {
+    if (
+      !window.confirm(
+        `آیا از ابطال و حذف فاکتور خرید شماره «${p.purchaseNumber}» (${p.supplierName}) به مبلغ ${formatMoney(
+          p.grandTotal
+        )} اطمینان دارید؟\nمقادیر خریداری‌شده از موجودی انبار مواد اولیه کسر خواهند شد.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/purchases/${p.id}`, {
+        method: "DELETE",
+      }).then((r) => r.json());
+
+      if (res.success) {
+        alert(res.message || "فاکتور خرید با موفقیت ابطال و حذف گردید.");
+        await fetchData();
+      } else {
+        alert(res.error || "خطا در ابطال فاکتور خرید");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور");
+    }
   };
 
   const addPurchaseItemRow = () => {
@@ -174,18 +233,21 @@ export const PurchasesView: React.FC = () => {
 
     setPurchaseSaving(true);
     try {
-      const res = await fetch("/api/purchases", {
-        method: "POST",
+      const url = editingPurchase ? `/api/purchases/${editingPurchase.id}` : "/api/purchases";
+      const method = editingPurchase ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(purchaseForm),
       }).then((r) => r.json());
 
       if (res.success) {
         setIsPurchaseModalOpen(false);
+        setEditingPurchase(null);
         await fetchData();
-        alert("فاکتور خرید با موفقیت ثبت شد و موجودی انبار مواد اولیه و میانگین قیمت خرید به‌روزرسانی شد.");
+        alert(editingPurchase ? "فاکتور خرید با موفقیت ویرایش شد." : "فاکتور خرید با موفقیت ثبت شد و موجودی انبار مواد اولیه و میانگین قیمت خرید به‌روزرسانی شد.");
       } else {
-        alert(res.error || "خطا در ثبت خرید");
+        alert(res.error || "خطا در ثبت یا ویرایش خرید");
       }
     } catch (err: any) {
       alert(err.message || "خطا در سیستم");
@@ -336,6 +398,7 @@ export const PurchasesView: React.FC = () => {
                     <th className="p-4">مبلغ کل خرید</th>
                     <th className="p-4">مبلغ پرداخت شده</th>
                     <th className="p-4">وضعیت فاکتور</th>
+                    <th className="p-4 text-center">عملیات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -351,6 +414,24 @@ export const PurchasesView: React.FC = () => {
                       <td className="p-4 text-emerald-400 font-medium">{formatMoney(p.paidAmount)}</td>
                       <td className="p-4">
                         <NeonBadge variant="green">ثبت شده در انبار</NeonBadge>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => openEditPurchase(p)}
+                            className="p-1.5 rounded-lg bg-slate-800 text-cyan-400 hover:bg-slate-700 hover:text-white transition"
+                            title="ویرایش فاکتور خرید"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePurchase(p)}
+                            className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 border border-rose-500/20 hover:bg-rose-900/50 hover:text-rose-200 transition"
+                            title="ابطال و حذف فاکتور خرید"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -474,7 +555,7 @@ export const PurchasesView: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <ShoppingCart className="h-5 w-5 text-emerald-400" />
-                ثبت فاکتور خرید مواد اولیه و ورود به انبار
+                {editingPurchase ? `ویرایش فاکتور خرید #${editingPurchase.purchaseNumber}` : "ثبت فاکتور خرید مواد اولیه و ورود به انبار"}
               </h3>
               <button
                 onClick={() => setIsPurchaseModalOpen(false)}
@@ -635,7 +716,7 @@ export const PurchasesView: React.FC = () => {
                   disabled={purchaseSaving}
                   className="rounded-xl bg-emerald-600 px-6 py-2.5 font-bold text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500 transition"
                 >
-                  {purchaseSaving ? "در حال ثبت..." : "تأیید و ثبت فاکتور خرید"}
+                  {purchaseSaving ? "در حال پردازش..." : editingPurchase ? "ذخیره تغییرات فاکتور" : "تأیید و ثبت فاکتور خرید"}
                 </button>
               </div>
             </form>

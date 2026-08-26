@@ -71,6 +71,7 @@ export const FinancialView: React.FC = () => {
 
   // Expense Modal State
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any | null>(null);
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [expenseForm, setExpenseForm] = useState({
     title: "",
@@ -217,8 +218,9 @@ export const FinancialView: React.FC = () => {
     }
   };
 
-  // Open Expense Modal
+  // Open Add Expense Modal
   const openAddExpense = () => {
+    setEditingExpense(null);
     setExpenseForm({
       title: "",
       category: "rent",
@@ -231,7 +233,22 @@ export const FinancialView: React.FC = () => {
     setIsExpenseModalOpen(true);
   };
 
-  // Save Expense
+  // Open Edit Expense Modal
+  const openEditExpense = (exp: any) => {
+    setEditingExpense(exp);
+    setExpenseForm({
+      title: exp.title || "",
+      category: exp.category || "rent",
+      amount: Number(exp.amount) || 0,
+      accountId: exp.accountId || accounts[0]?.id || "",
+      projectId: exp.projectId || "",
+      expenseDate: exp.expenseDate ? String(exp.expenseDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      notes: exp.description || exp.notes || "",
+    });
+    setIsExpenseModalOpen(true);
+  };
+
+  // Save Expense (Create or Update)
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expenseForm.title.trim() || expenseForm.amount <= 0 || !expenseForm.accountId) {
@@ -241,16 +258,22 @@ export const FinancialView: React.FC = () => {
 
     setExpenseSaving(true);
     try {
-      const res = await fetch("/api/expenses", {
-        method: "POST",
+      const url = editingExpense ? `/api/expenses/${editingExpense.id}` : "/api/expenses";
+      const method = editingExpense ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(expenseForm),
+        body: JSON.stringify({
+          ...expenseForm,
+          description: expenseForm.notes,
+        }),
       }).then((r) => r.json());
 
       if (res.success) {
         setIsExpenseModalOpen(false);
+        setEditingExpense(null);
         await fetchData();
-        alert("هزینه جاری با موفقیت ثبت شد.");
+        alert(editingExpense ? "سند هزینه با موفقیت ویرایش شد." : "هزینه جاری با موفقیت ثبت شد.");
       } else {
         alert(res.error || "خطا در ثبت هزینه");
       }
@@ -258,6 +281,28 @@ export const FinancialView: React.FC = () => {
       alert(err.message || "خطا در سیستم");
     } finally {
       setExpenseSaving(false);
+    }
+  };
+
+  // Delete / Void Expense
+  const handleDeleteExpense = async (exp: any) => {
+    if (!window.confirm(`آیا از ابطال و حذف سند هزینه «${exp.title}» به مبلغ ${formatMoney(exp.amount)} اطمینان دارید؟\nاین مبلغ به موجودی حساب یا صندوق بازگردانده خواهد شد.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/expenses/${exp.id}`, {
+        method: "DELETE",
+      }).then((r) => r.json());
+
+      if (res.success) {
+        alert(res.message || "سند هزینه با موفقیت ابطال و حذف گردید.");
+        await fetchData();
+      } else {
+        alert(res.error || "خطا در ابطال سند هزینه");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور");
     }
   };
 
@@ -736,22 +781,41 @@ export const FinancialView: React.FC = () => {
                   <th className="p-3.5">پرداخت از حساب</th>
                   <th className="p-3.5">مبلغ هزینه</th>
                   <th className="p-3.5">پروژه</th>
+                  <th className="p-3.5 text-center">عملیات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {expenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-slate-800/40">
+                  <tr key={exp.id} className="hover:bg-slate-800/40 transition">
                     <td className="p-3.5 font-semibold text-white">{exp.title}</td>
                     <td className="p-3.5 text-slate-400">{exp.category}</td>
                     <td className="p-3.5 text-slate-300">{toJalaliDate(exp.expenseDate || exp.createdAt)}</td>
                     <td className="p-3.5 text-slate-400">{exp.accountName || "صندوق اصلی"}</td>
                     <td className="p-3.5 font-bold text-rose-400 font-mono">{formatMoney(exp.amount)}</td>
                     <td className="p-3.5 text-slate-400">{exp.projectName || "عمومی"}</td>
+                    <td className="p-3.5">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => openEditExpense(exp)}
+                          className="p-1.5 rounded-lg bg-slate-800 text-cyan-400 hover:bg-slate-700 hover:text-white transition"
+                          title="ویرایش سند هزینه"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExpense(exp)}
+                          className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 border border-rose-500/20 hover:bg-rose-900/50 hover:text-rose-200 transition"
+                          title="ابطال و حذف هزینه"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!expenses.length && (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-slate-500">
+                    <td colSpan={7} className="p-6 text-center text-slate-500">
                       هزینه‌ای ثبت نشده است.
                     </td>
                   </tr>
@@ -909,7 +973,7 @@ export const FinancialView: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-emerald-400" />
-                ثبت سند هزینه جدید
+                {editingExpense ? `ویرایش سند هزینه: ${editingExpense.title}` : "ثبت سند هزینه جدید"}
               </h3>
               <button
                 onClick={() => setIsExpenseModalOpen(false)}
@@ -1024,7 +1088,7 @@ export const FinancialView: React.FC = () => {
                   disabled={expenseSaving}
                   className="rounded-xl bg-emerald-600 px-6 py-2.5 font-bold text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500 transition"
                 >
-                  {expenseSaving ? "در حال ثبت..." : "ثبت نهایی هزینه"}
+                  {expenseSaving ? "در حال پردازش..." : editingExpense ? "ذخیره تغییرات هزینه" : "ثبت نهایی هزینه"}
                 </button>
               </div>
             </form>

@@ -55,6 +55,21 @@ export async function POST(req: Request) {
       .returning();
 
     if (body.accountId) {
+      const [acc] = await db.select().from(accounts).where(eq(accounts.id, body.accountId)).limit(1);
+      if (!acc) {
+        return NextResponse.json({ success: false, error: "حساب مالی انتخاب شده یافت نشد." }, { status: 404 });
+      }
+      const currentBalance = Number(acc.balance) || 0;
+      if (currentBalance < amt) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `موجودی حساب «${acc.name}» کافی نیست و نمی‌تواند منفی باشد. موجودی فعلی: ${currentBalance.toLocaleString("fa-IR")} تومان، مبلغ هزینه: ${amt.toLocaleString("fa-IR")} تومان.`,
+          },
+          { status: 400 }
+        );
+      }
+
       await db
         .update(accounts)
         .set({ balance: sql`${accounts.balance} - ${amt}` })

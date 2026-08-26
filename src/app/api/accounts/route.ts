@@ -58,6 +58,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "نام حساب یا صندوق الزامی است." }, { status: 400 });
     }
 
+    if (Number(balance) < 0) {
+      return NextResponse.json({ success: false, error: "موجودی حساب نمی‌تواند منفی باشد." }, { status: 400 });
+    }
+
     let code = body.code?.trim();
     if (!code) {
       const prefix = type === "cash" ? "CASH" : type === "pos" ? "POS" : "ACC";
@@ -141,7 +145,12 @@ export async function PUT(req: Request) {
     if (type !== undefined) updateData.type = type;
     if (bankName !== undefined) updateData.bankName = bankName?.trim() || null;
     if (accountNumber !== undefined) updateData.accountNumber = accountNumber?.trim() || null;
-    if (balance !== undefined) updateData.balance = String(balance);
+    if (balance !== undefined) {
+      if (Number(balance) < 0) {
+        return NextResponse.json({ success: false, error: "موجودی حساب نمی‌تواند منفی باشد." }, { status: 400 });
+      }
+      updateData.balance = String(balance);
+    }
     if (isDefault !== undefined) updateData.isDefault = Boolean(isDefault);
 
     const [updated] = await db.update(accounts).set(updateData).where(eq(accounts.id, id)).returning();

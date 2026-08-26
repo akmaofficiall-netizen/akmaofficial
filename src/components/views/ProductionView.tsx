@@ -12,6 +12,7 @@ import {
   Package,
   Layers,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import { toJalaliDate, formatMoney, formatNumber, formatRial } from "@/lib/dateUtils";
 import { parsePersianError } from "@/lib/errorUtils";
@@ -112,6 +113,31 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
     }
   };
 
+  const handleDeleteBatch = async (b: any) => {
+    if (
+      !window.confirm(
+        `آیا از ابطال و حذف بچ تولید #${b.batchNumber} (${b.productName}) اطمینان دارید؟\nمقادیر مواد اولیه مصرفی به انبار بازگردانده شده و محصولات خروجی کسر خواهند شد.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/production/${b.id}`, {
+        method: "DELETE",
+      }).then((r) => r.json());
+
+      if (res.success) {
+        showToast(res.message || "بچ تولید با موفقیت ابطال و حذف گردید.", "success");
+        await fetchData();
+      } else {
+        showToast(parsePersianError(res.error || "خطا در ابطال بچ تولید"), "error");
+      }
+    } catch (err: any) {
+      showToast(parsePersianError(err.message || "خطا در برقراری ارتباط"), "error");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -169,6 +195,7 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                 <th className="p-4">معادل ریال</th>
                 <th className="p-4">تاریخ تولید</th>
                 <th className="p-4">وضعیت</th>
+                <th className="p-4 text-center">عملیات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
@@ -187,11 +214,22 @@ export const ProductionView: React.FC<{ selectedProjectId: string | null }> = ({
                     <td className="p-4">
                       <NeonBadge variant="green">تکمیل شده</NeonBadge>
                     </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-center">
+                        <button
+                          onClick={() => handleDeleteBatch(b)}
+                          className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 border border-rose-500/20 hover:bg-rose-900/50 hover:text-rose-200 transition"
+                          title="ابطال و حذف بچ تولید"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-500">
+                  <td colSpan={11} className="p-8 text-center text-slate-500">
                     هیچ بچ تولیدی ثبت نشده است.
                   </td>
                 </tr>

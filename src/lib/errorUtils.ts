@@ -27,6 +27,11 @@ export function parsePersianError(error: any): string {
     return "تمامی فیلدهای ستاره‌دار و اجباری باید به درستی تکمیل گردند.";
   }
 
+  // Check constraint & Account balance non-negative
+  if (lower.includes("accounts_balance_non_negative") || lower.includes("balance >= 0") || lower.includes("منفی")) {
+    return "موجودی حساب کافی نیست و نمی‌تواند منفی باشد.";
+  }
+
   // Insufficient balance / stock
   if (lower.includes("insufficient") || lower.includes("موجودی ناکافی")) {
     return "موجودی کافی برای انجام این عملیات در حساب یا انبار وجود ندارد.";
