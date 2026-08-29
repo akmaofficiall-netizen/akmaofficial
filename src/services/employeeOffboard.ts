@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { employees, customers, customerAssignments, tasks, invoices, commissionLedger, consignments } from "@/db/schema";
+import { employees, employeeAccounts, customers, customerAssignments, tasks, invoices, commissionLedger, consignments } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { logAuditEvent } from "./audit";
 export interface OffboardEmployeeInput { employeeId:string; replacementEmployeeId?:string|null; transferReason?:string; }
@@ -23,6 +23,7 @@ export async function offboardEmployee(input:OffboardEmployeeInput){
    await tx.update(customers).set({assignedEmployeeId:input.replacementEmployeeId||null,updatedAt:new Date()}).where(eq(customers.assignedEmployeeId,input.employeeId));
    await tx.update(tasks).set({assignedEmployeeId:input.replacementEmployeeId||null,updatedAt:new Date()}).where(and(eq(tasks.assignedEmployeeId,input.employeeId),inArray(tasks.status,['open','in_progress','overdue'])));
    if(input.replacementEmployeeId)await tx.update(consignments).set({employeeId:input.replacementEmployeeId}).where(and(eq(consignments.employeeId,input.employeeId),inArray(consignments.status,['delivered','partially_sold'])));
+   await tx.update(employeeAccounts).set({status:'suspended',updatedAt:new Date()}).where(eq(employeeAccounts.employeeId,input.employeeId));
    return tx.update(employees).set({status:'transferred',offboardingStage:'offboarding_complete',notes:`خروج/انتقال مسئولیت‌ها به ${replacementName}. علت: ${input.transferReason||'انتقال سازمانی'}. ${emp.notes||''}`,updatedAt:new Date()}).where(eq(employees.id,input.employeeId)).returning();
  });
  await logAuditEvent('OFFBOARD','employee',input.employeeId,{before:emp,after:updatedEmp,openItems:open,replacementEmployeeId:input.replacementEmployeeId||null,replacementName,reason:input.transferReason});

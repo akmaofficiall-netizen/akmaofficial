@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { employeeAccounts, employeeProjectAssignments, roles } from "@/db/schema";
+import { employeeAccounts, employees, employeeProjectAssignments, roles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { verifySession } from "@/services/employeeAuth";
 import { employeePermissionSet } from "@/services/partner";
@@ -14,14 +14,22 @@ export async function getEmployeeContext(): Promise<EmployeeContext | null> {
     if (!raw) return null;
     const employeeId = verifySession(raw);
     if (!employeeId) return null;
-    const [account] = await db
-      .select({ status: employeeAccounts.status, roleId: employeeAccounts.roleId })
+    const [row] = await db
+      .select({
+        accountStatus: employeeAccounts.status,
+        roleId: employeeAccounts.roleId,
+        employeeStatus: employees.status,
+        offboardingStage: employees.offboardingStage,
+      })
       .from(employeeAccounts)
+      .innerJoin(employees, eq(employeeAccounts.employeeId, employees.id))
       .where(eq(employeeAccounts.employeeId, employeeId))
       .limit(1);
-    if (!account || account.status !== "active") return null;
-    const role = account.roleId
-      ? (await db.select({ code: roles.code }).from(roles).where(eq(roles.id, account.roleId)).limit(1))[0]
+    if (!row || row.accountStatus !== "active" || row.employeeStatus !== "active" || (row.offboardingStage && row.offboardingStage !== "active")) {
+      return null;
+    }
+    const role = row.roleId
+      ? (await db.select({ code: roles.code }).from(roles).where(eq(roles.id, row.roleId)).limit(1))[0]
       : null;
     const permissions = new Set((await employeePermissionSet(employeeId)).map((p) => p.code));
     return { employeeId, permissions, roleCode: role?.code };
@@ -40,16 +48,15 @@ export async function getScopedProjectIds() {
 
 export async function requirePermission(permission: string, projectId?: string | null) {
   const context = await getEmployeeContext();
-  // Default to system admin when not logged into a specific restricted employee session
   if (!context) {
-    return { employeeId: "admin", permissions: new Set(["*"]), roleCode: "admin" };
+    throw new Error("دسترسی غیرمجاز: لطفاً ابتدا وارد حساب کاربری خود شوید.");
   }
   if (context.permissions.has("*") || context.roleCode === "admin" || context.permissions.has(permission)) {
     return context;
   }
   if (!projectId) {
     if (!context.permissions.has(permission)) {
-      throw new Error(`دسترسی موردنیاز: ${permission}`);
+      throw new Error(`دسترسی موردنیاز برای این عملیات وجود ندارد: ${permission}`);
     }
     return context;
   }

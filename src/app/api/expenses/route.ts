@@ -41,44 +41,44 @@ export async function POST(req: Request) {
     const expNum = `EXP-${Date.now().toString().slice(-6)}`;
     const amt = Number(body.amount);
 
-    const [created] = await db
-      .insert(expenses)
-      .values({
-        expenseNumber: expNum,
-        title: body.title,
-        category: body.category || "عمومی",
-        amount: amt.toString(),
-        projectId: body.projectId || null,
-        accountId: body.accountId || null,
-        description: body.description || null,
-      })
-      .returning();
+    const created = await db.transaction(async (tx) => {
+      if (body.accountId) {
+        const [acc] = await tx.select().from(accounts).where(eq(accounts.id, body.accountId)).limit(1);
+        if (!acc) {
+          throw new Error("حساب مالی انتخاب شده یافت نشد.");
+        }
+        const currentBalance = Number(acc.balance) || 0;
+        if (currentBalance < amt) {
+          throw new Error(
+            `موجودی حساب «${acc.name}» کافی نیست و نمی‌تواند منفی باشد. موجودی فعلی: ${currentBalance.toLocaleString("fa-IR")} تومان، مبلغ هزینه: ${amt.toLocaleString("fa-IR")} تومان.`
+          );
+        }
 
-    if (body.accountId) {
-      const [acc] = await db.select().from(accounts).where(eq(accounts.id, body.accountId)).limit(1);
-      if (!acc) {
-        return NextResponse.json({ success: false, error: "حساب مالی انتخاب شده یافت نشد." }, { status: 404 });
-      }
-      const currentBalance = Number(acc.balance) || 0;
-      if (currentBalance < amt) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `موجودی حساب «${acc.name}» کافی نیست و نمی‌تواند منفی باشد. موجودی فعلی: ${currentBalance.toLocaleString("fa-IR")} تومان، مبلغ هزینه: ${amt.toLocaleString("fa-IR")} تومان.`,
-          },
-          { status: 400 }
-        );
+        await tx
+          .update(accounts)
+          .set({ balance: sql`${accounts.balance} - ${amt}` })
+          .where(eq(accounts.id, body.accountId));
       }
 
-      await db
-        .update(accounts)
-        .set({ balance: sql`${accounts.balance} - ${amt}` })
-        .where(eq(accounts.id, body.accountId));
-    }
+      const [res] = await tx
+        .insert(expenses)
+        .values({
+          expenseNumber: expNum,
+          title: body.title,
+          category: body.category || "عمومی",
+          amount: amt.toString(),
+          projectId: body.projectId || null,
+          accountId: body.accountId || null,
+          description: body.description || null,
+        })
+        .returning();
+
+      return res;
+    });
 
     await logAuditEvent("CREATE", "expense", created.id, { title: body.title, amount: amt });
     return NextResponse.json({ success: true, expense: created });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: error.message?.includes("موجودی حساب") ? 400 : 500 });
   }
 }

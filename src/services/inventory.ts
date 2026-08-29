@@ -30,8 +30,12 @@ export interface InventoryTransactionInput {
 /**
  * Gets or creates default warehouse if not provided
  */
-export async function getDefaultWarehouseId(type: "central" | "raw_materials" | "finished_goods" = "central"): Promise<string> {
-  const [existing] = await db
+export async function getDefaultWarehouseId(
+  type: "central" | "raw_materials" | "finished_goods" = "central",
+  tx?: any
+): Promise<string> {
+  const client = tx || db;
+  const [existing] = await client
     .select()
     .from(warehouses)
     .where(eq(warehouses.type, type))
@@ -39,7 +43,7 @@ export async function getDefaultWarehouseId(type: "central" | "raw_materials" | 
 
   if (existing) return existing.id;
 
-  const [created] = await db
+  const [created] = await client
     .insert(warehouses)
     .values({
       code: `WH-${type.toUpperCase()}`,
@@ -54,21 +58,24 @@ export async function getDefaultWarehouseId(type: "central" | "raw_materials" | 
 
 /**
  * Records an inventory transaction in the ledger and updates stock quantity.
- * PROMPT FIX E & G: Never silently clamp negative stock to zero! Safe rejection if stock insufficient.
+ * Atomic and transaction-aware. Never silently clamp negative stock to zero.
  */
-export async function recordInventoryTransaction(input: InventoryTransactionInput) {
-  const warehouseId = input.warehouseId || (await getDefaultWarehouseId(input.itemType === "raw_material" ? "raw_materials" : "finished_goods"));
+export async function recordInventoryTransaction(input: InventoryTransactionInput, tx?: any) {
+  const client = tx || db;
+  const warehouseId =
+    input.warehouseId ||
+    (await getDefaultWarehouseId(input.itemType === "raw_material" ? "raw_materials" : "finished_goods", client));
 
   let currentStock = 0;
   let currentCost = 0;
 
   if (input.itemType === "product") {
-    const [prod] = await db.select().from(products).where(eq(products.id, input.itemId)).limit(1);
+    const [prod] = await client.select().from(products).where(eq(products.id, input.itemId)).limit(1);
     if (!prod) throw new Error(`محصول یافت نشد: ${input.itemId}`);
     currentStock = Number(prod.stockQuantity) || 0;
     currentCost = Number(prod.calculatedCost) || Number(prod.basePrice) || 0;
   } else {
-    const [rm] = await db.select().from(rawMaterials).where(eq(rawMaterials.id, input.itemId)).limit(1);
+    const [rm] = await client.select().from(rawMaterials).where(eq(rawMaterials.id, input.itemId)).limit(1);
     if (!rm) throw new Error(`ماده اولیه یافت نشد: ${input.itemId}`);
     currentStock = Number(rm.stockQuantity) || 0;
     currentCost = Number(rm.averageCost) || Number(rm.currentCost) || 0;
@@ -79,9 +86,10 @@ export async function recordInventoryTransaction(input: InventoryTransactionInpu
 
   // Insufficient stock check for outbound operations
   if (change < 0 && newStock < 0 && !input.allowNegativeStock) {
-    const itemName = input.itemType === "product"
-      ? (await db.select({ name: products.name }).from(products).where(eq(products.id, input.itemId)))[0]?.name
-      : (await db.select({ name: rawMaterials.name }).from(rawMaterials).where(eq(rawMaterials.id, input.itemId)))[0]?.name;
+    const itemName =
+      input.itemType === "product"
+        ? (await client.select({ name: products.name }).from(products).where(eq(products.id, input.itemId)))[0]?.name
+        : (await client.select({ name: rawMaterials.name }).from(rawMaterials).where(eq(rawMaterials.id, input.itemId)))[0]?.name;
 
     throw new Error(
       `موجودی ناکافی برای آیتم "${itemName || input.itemId}". موجودی فعلی: ${currentStock}، مقدار مورد نیاز: ${Math.abs(change)}.`
@@ -92,7 +100,7 @@ export async function recordInventoryTransaction(input: InventoryTransactionInpu
   const totalCost = Math.round(Math.abs(change) * unitCost * 100) / 100;
 
   // Record ledger entry
-  const [ledgerEntry] = await db
+  const [ledgerEntry] = await client
     .insert(inventoryLedger)
     .values({
       warehouseId,
@@ -113,12 +121,12 @@ export async function recordInventoryTransaction(input: InventoryTransactionInpu
 
   // Update stock summary on Master Table
   if (input.itemType === "product") {
-    await db
+    await client
       .update(products)
       .set({ stockQuantity: newStock.toString(), updatedAt: new Date() })
       .where(eq(products.id, input.itemId));
   } else {
-    await db
+    await client
       .update(rawMaterials)
       .set({ stockQuantity: newStock.toString(), updatedAt: new Date() })
       .where(eq(rawMaterials.id, input.itemId));
