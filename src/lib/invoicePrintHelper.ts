@@ -1,7 +1,19 @@
 import { toJalaliDate, formatMoney, formatRial, formatNumber } from "@/lib/dateUtils";
 import { numberToPersianWords } from "@/lib/numberToWords";
 
+export interface SellerInfo {
+  businessName?: string | null;
+  economicCode?: string | null;
+  taxNumber?: string | null;
+  nationalId?: string | null;
+  registrationNumber?: string | null;
+  postalCode?: string | null;
+  companyAddress?: string | null;
+  companyPhone?: string | null;
+}
+
 export interface PrintableInvoiceData {
+  sellerInfo?: SellerInfo | null;
   invoice: {
     id: string;
     invoiceNumber: string;
@@ -34,26 +46,45 @@ export interface PrintableInvoiceData {
 }
 
 export function generateInvoiceHtml(data: PrintableInvoiceData): string {
-  const { invoice, items } = data;
+  const { invoice, items, sellerInfo } = data;
   const grandTotalNum = Number(invoice.grandTotal) || 0;
   const subtotalNum = Number(invoice.subtotal) || 0;
   const discountNum = Number(invoice.invoiceDiscount) || 0;
   const paidNum = Number(invoice.paidAmount) || 0;
   const balanceNum = Number(invoice.balanceDue) || 0;
 
+  const sellerName = sellerInfo?.businessName || "سازمان و صنایع بازرگانی حکمت آکما";
+  const economicCode = sellerInfo?.economicCode || sellerInfo?.taxNumber || "—";
+  const nationalId = sellerInfo?.nationalId || "—";
+  const regNumber = sellerInfo?.registrationNumber || "";
+  const postalCode = sellerInfo?.postalCode || "";
+  const address = sellerInfo?.companyAddress || "";
+  const phone = sellerInfo?.companyPhone || "";
+
+  let contactLine = "";
+  if (address && phone) {
+    contactLine = `${address} - تلفن: ${phone}`;
+  } else if (address) {
+    contactLine = address;
+  } else if (phone) {
+    contactLine = `تلفن: ${phone}`;
+  } else {
+    contactLine = "دفتر مرکزی - تلفن: ۰۲۱-۸۸۹۹۰۰۱۱";
+  }
+
   const itemsRows = items
     .map(
       (item, idx) => `
     <tr style="border-bottom: 1px solid #cbd5e1;">
-      <td style="padding: 7px 6px; text-align: center; font-weight: bold; border-left: 1px solid #cbd5e1; color: #475569;">${idx + 1}</td>
+      <td style="padding: 7px 6px; text-align: center; font-weight: bold; border-left: 1px solid #cbd5e1; color: #0f172a;">${idx + 1}</td>
       <td style="padding: 7px 8px; font-weight: bold; border-left: 1px solid #cbd5e1; color: #0f172a; text-align: right;">
         ${item.productNameSnapshot}
-        ${item.productCode ? `<span style="font-size: 10px; color: #64748b; margin-right: 4px;">[${item.productCode}]</span>` : ""}
+        ${item.productCode ? `<span style="font-size: 10px; color: #475569; margin-right: 4px;">[${item.productCode}]</span>` : ""}
       </td>
       <td style="padding: 7px 6px; text-align: center; font-weight: bold; border-left: 1px solid #cbd5e1; color: #0f172a;">${formatNumber(item.quantity)}</td>
-      <td style="padding: 7px 6px; text-align: center; border-left: 1px solid #cbd5e1; color: #475569;">${item.productUnit || "عدد"}</td>
-      <td style="padding: 7px 8px; text-align: left; border-left: 1px solid #cbd5e1; color: #0f172a;">${formatMoney(item.unitPrice, "")}</td>
-      <td style="padding: 7px 8px; text-align: left; border-left: 1px solid #cbd5e1; color: #0f172a;">${formatMoney(item.discountAmount || 0, "")}</td>
+      <td style="padding: 7px 6px; text-align: center; border-left: 1px solid #cbd5e1; color: #0f172a;">${item.productUnit || "عدد"}</td>
+      <td style="padding: 7px 8px; text-align: left; border-left: 1px solid #cbd5e1; color: #0f172a; font-weight: bold;">${formatMoney(item.unitPrice, "")}</td>
+      <td style="padding: 7px 8px; text-align: left; border-left: 1px solid #cbd5e1; color: #0f172a; font-weight: bold;">${formatMoney(item.discountAmount || 0, "")}</td>
       <td style="padding: 7px 8px; text-align: left; font-weight: bold; color: #0f172a;">${formatMoney(item.lineTotal, "")}</td>
     </tr>
   `
@@ -89,13 +120,13 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       width: 100%;
       max-width: 820px;
       margin: 0 auto;
-      border: 2px solid #1e293b;
+      border: 2px solid #0f172a;
       border-radius: 12px;
       padding: 16px;
       background: #ffffff;
     }
     .header-box {
-      border-bottom: 2px solid #1e293b;
+      border-bottom: 2px solid #0f172a;
       padding-bottom: 12px;
       margin-bottom: 12px;
       display: flex;
@@ -110,10 +141,10 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     }
     .org-sub {
       font-size: 11px;
-      color: #475569;
+      color: #334155;
     }
     .meta-box {
-      border: 1px solid #94a3b8;
+      border: 1px solid #64748b;
       background-color: #f8fafc;
       border-radius: 8px;
       padding: 8px 14px;
@@ -128,7 +159,7 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       margin-bottom: 12px;
     }
     .info-card {
-      border: 1px solid #94a3b8;
+      border: 1px solid #64748b;
       background-color: #f8fafc;
       border-radius: 8px;
       padding: 10px;
@@ -136,13 +167,13 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     }
     .card-title {
       font-weight: 800;
-      color: #1e293b;
+      color: #0f172a;
       border-bottom: 1px solid #cbd5e1;
       padding-bottom: 4px;
       margin-bottom: 6px;
     }
     .table-container {
-      border: 1px solid #1e293b;
+      border: 1px solid #0f172a;
       border-radius: 8px;
       overflow: hidden;
       margin-bottom: 12px;
@@ -154,9 +185,9 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     }
     thead {
       background-color: #e2e8f0;
-      color: #1e293b;
+      color: #0f172a;
       font-weight: bold;
-      border-bottom: 1px solid #1e293b;
+      border-bottom: 1px solid #0f172a;
     }
     thead th {
       padding: 8px 6px;
@@ -179,7 +210,7 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       font-size: 11px;
     }
     .calcs-box {
-      border: 1px solid #1e293b;
+      border: 1px solid #0f172a;
       background-color: #f8fafc;
       border-radius: 8px;
       padding: 10px;
@@ -189,9 +220,13 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       display: flex;
       justify-content: space-between;
       margin-bottom: 4px;
+      color: #0f172a;
+    }
+    .calc-row strong, .calc-row span {
+      color: #0f172a;
     }
     .calc-row.highlight {
-      border-top: 1px solid #94a3b8;
+      border-top: 1px solid #64748b;
       padding-top: 5px;
       font-size: 12px;
       font-weight: 900;
@@ -201,14 +236,14 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
-      border-top: 2px solid #1e293b;
+      border-top: 2px solid #0f172a;
       padding-top: 16px;
       text-align: center;
       margin-top: 10px;
     }
     .sign-line {
       height: 45px;
-      border-bottom: 1px dashed #94a3b8;
+      border-bottom: 1px dashed #64748b;
       margin: 8px 25px 0 25px;
     }
     @media print {
@@ -228,13 +263,12 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     <!-- Header -->
     <div class="header-box">
       <div>
-        <div class="org-title">سازمان و صنایع بازرگانی حکمت آکما</div>
+        <div class="org-title">${sellerName}</div>
         <div class="org-sub">صورتحساب فروش کالا و خدمات (فاکتور رسمی تجاری)</div>
       </div>
       <div class="meta-box">
-        <div><span style="color: #64748b;">شماره فاکتور: </span><strong style="color: #0f172a;">${invoice.invoiceNumber || "—"}</strong></div>
-        <div style="margin-top: 3px;"><span style="color: #64748b;">تاریخ صدور: </span><strong style="color: #0f172a;">${toJalaliDate(invoice.invoiceDate)}</strong></div>
-        ${invoice.projectName ? `<div style="margin-top: 3px;"><span style="color: #64748b;">پروژه: </span><strong style="color: #7e22ce;">${invoice.projectName}</strong></div>` : ""}
+        <div><span style="color: #475569;">شماره فاکتور: </span><strong style="color: #0f172a;">${invoice.invoiceNumber || "—"}</strong></div>
+        <div style="margin-top: 3px;"><span style="color: #475569;">تاریخ صدور: </span><strong style="color: #0f172a;">${toJalaliDate(invoice.invoiceDate)}</strong></div>
       </div>
     </div>
 
@@ -242,15 +276,16 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     <div class="grid-2">
       <div class="info-card">
         <div class="card-title">مشخصات فروشنده</div>
-        <div><span style="color: #64748b;">نام شرکت: </span><strong>شرکت حکمت آکما</strong></div>
-        <div><span style="color: #64748b;">کد اقتصادی: </span>۴۱۱۵۸۹۳۲۴۷۸۵ | <span style="color: #64748b;">شناسه ملی: </span>۱۰۳۸۰۴۵۹۶۱۰</div>
-        <div><span style="color: #64748b;">نشانی و تلفن: </span>دفتر مرکزی - تلفن: ۰۲۱-۸۸۹۹۰۰۱۱</div>
+        <div><span style="color: #475569;">نام فروشنده: </span><strong style="color: #0f172a;">${sellerName}</strong></div>
+        <div><span style="color: #475569;">کد اقتصادی: </span><strong style="color: #0f172a;">${economicCode}</strong> | <span style="color: #475569;">شناسه ملی: </span><strong style="color: #0f172a;">${nationalId}</strong></div>
+        ${(regNumber || postalCode) ? `<div>${regNumber ? `<span style="color: #475569;">شماره ثبت: </span><strong style="color: #0f172a;">${regNumber}</strong> | ` : ""}${postalCode ? `<span style="color: #475569;">کد پستی: </span><strong style="color: #0f172a;">${postalCode}</strong>` : ""}</div>` : ""}
+        <div><span style="color: #475569;">نشانی و تلفن: </span><span style="color: #0f172a;">${contactLine}</span></div>
       </div>
       <div class="info-card">
         <div class="card-title">مشخصات خریدار</div>
-        <div><span style="color: #64748b;">نام خریدار / فروشگاه: </span><strong>${invoice.customerName || "—"} ${invoice.customerStore ? `(${invoice.customerStore})` : ""}</strong></div>
-        <div><span style="color: #64748b;">شماره تماس: </span>${invoice.customerMobile || "—"}</div>
-        <div><span style="color: #64748b;">نشانی: </span>${invoice.customerAddress || "تهران - ارسال حضوری"}</div>
+        <div><span style="color: #475569;">نام خریدار / فروشگاه: </span><strong style="color: #0f172a;">${invoice.customerName || "—"} ${invoice.customerStore ? `(${invoice.customerStore})` : ""}</strong></div>
+        <div><span style="color: #475569;">شماره تماس: </span><span style="color: #0f172a; font-weight: bold;">${invoice.customerMobile || "—"}</span></div>
+        <div><span style="color: #475569;">نشانی: </span><span style="color: #0f172a;">${invoice.customerAddress || "تهران - تحویل حضوری"}</span></div>
       </div>
     </div>
 
@@ -259,12 +294,12 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       <table>
         <thead>
           <tr>
-            <th style="width: 40px; text-align: center; border-left: 1px solid #94a3b8;">ردیف</th>
-            <th style="border-left: 1px solid #94a3b8;">شرح کالا یا خدمات</th>
-            <th style="width: 55px; text-align: center; border-left: 1px solid #94a3b8;">تعداد</th>
-            <th style="width: 50px; text-align: center; border-left: 1px solid #94a3b8;">واحد</th>
-            <th style="width: 100px; text-align: left; border-left: 1px solid #94a3b8;">مبلغ واحد (تومان)</th>
-            <th style="width: 90px; text-align: left; border-left: 1px solid #94a3b8;">تخفیف (تومان)</th>
+            <th style="width: 40px; text-align: center; border-left: 1px solid #64748b;">ردیف</th>
+            <th style="border-left: 1px solid #64748b;">شرح کالا یا خدمات</th>
+            <th style="width: 55px; text-align: center; border-left: 1px solid #64748b;">تعداد</th>
+            <th style="width: 50px; text-align: center; border-left: 1px solid #64748b;">واحد</th>
+            <th style="width: 100px; text-align: left; border-left: 1px solid #64748b;">مبلغ واحد (تومان)</th>
+            <th style="width: 90px; text-align: left; border-left: 1px solid #64748b;">تخفیف (تومان)</th>
             <th style="width: 110px; text-align: left;">مبلغ کل (تومان)</th>
           </tr>
         </thead>
@@ -274,41 +309,40 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       </table>
     </div>
 
-    <!-- Summary Box -->
+    <!-- Summary Box (All numbers/prices in solid black) -->
     <div class="summary-grid">
       <div class="words-box">
         <div>
-          <div style="color: #64748b; font-weight: bold; margin-bottom: 4px;">مبلغ کل قابل پرداخت به حروف:</div>
-          <div style="font-weight: bold; color: #0f172a; font-size: 12px; line-height: 1.6;">${numberToPersianWords(grandTotalNum, "تومان")}</div>
-          <div style="font-size: 10px; color: #64748b; margin-top: 4px;">معادل: ${formatRial(grandTotalNum)}</div>
+          <div style="color: #334155; font-weight: bold; margin-bottom: 4px;">مبلغ کل قابل پرداخت به حروف:</div>
+          <div style="font-weight: 900; color: #0f172a; font-size: 12px; line-height: 1.6;">${numberToPersianWords(grandTotalNum, "تومان")}</div>
+          <div style="font-size: 10px; color: #475569; margin-top: 4px; font-weight: bold;">معادل: ${formatRial(grandTotalNum)}</div>
         </div>
-        ${invoice.employeeName ? `<div style="border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: 6px; color: #475569;">ویزیتور / نماینده فروش: <strong>${invoice.employeeName}</strong></div>` : ""}
       </div>
 
       <div class="calcs-box">
         <div class="calc-row">
-          <span style="color: #475569;">جمع اقلام فاکتور:</span>
-          <strong>${formatMoney(subtotalNum)}</strong>
+          <span style="color: #0f172a;">جمع اقلام فاکتور:</span>
+          <strong style="color: #0f172a;">${formatMoney(subtotalNum)}</strong>
         </div>
         ${
           discountNum > 0
-            ? `<div class="calc-row" style="color: #e11d48;">
-          <span>تخفیف کلی فاکتور:</span>
-          <span>${formatMoney(discountNum)}</span>
+            ? `<div class="calc-row">
+          <span style="color: #0f172a;">تخفیف کلی فاکتور:</span>
+          <strong style="color: #0f172a;">${formatMoney(discountNum)}</strong>
         </div>`
             : ""
         }
         <div class="calc-row highlight">
-          <span>مبلغ نهایی فاکتور:</span>
-          <span style="color: #6b21a8;">${formatMoney(grandTotalNum)}</span>
+          <span style="color: #0f172a; font-weight: 900;">مبلغ کل فاکتور:</span>
+          <strong style="color: #0f172a; font-weight: 900;">${formatMoney(grandTotalNum)}</strong>
         </div>
-        <div class="calc-row" style="color: #047857; border-top: 1px solid #cbd5e1; padding-top: 4px; margin-top: 4px;">
-          <span>مبلغ پرداخت شده:</span>
-          <span>${formatMoney(paidNum)}</span>
+        <div class="calc-row" style="border-top: 1px solid #cbd5e1; padding-top: 4px; margin-top: 4px;">
+          <span style="color: #0f172a;">مبلغ پرداخت شده:</span>
+          <strong style="color: #0f172a;">${formatMoney(paidNum)}</strong>
         </div>
-        <div class="calc-row" style="color: #be123c; font-weight: bold;">
-          <span>مانده بدهی (طلب):</span>
-          <span>${formatMoney(balanceNum)}</span>
+        <div class="calc-row">
+          <span style="color: #0f172a; font-weight: bold;">مانده بدهی (طلب):</span>
+          <strong style="color: #0f172a; font-weight: bold;">${formatMoney(balanceNum)}</strong>
         </div>
       </div>
     </div>
@@ -316,11 +350,11 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     <!-- Signatures -->
     <div class="signatures-grid">
       <div>
-        <strong style="color: #334155;">مهر و امضای فروشنده (شرکت حکمت آکما)</strong>
+        <strong style="color: #0f172a;">مهر و امضای فروشنده (${sellerName})</strong>
         <div class="sign-line"></div>
       </div>
       <div>
-        <strong style="color: #334155;">مهر و امضای خریدار / تحویل‌گیرنده</strong>
+        <strong style="color: #0f172a;">مهر و امضای خریدار / تحویل‌گیرنده</strong>
         <div class="sign-line"></div>
       </div>
     </div>

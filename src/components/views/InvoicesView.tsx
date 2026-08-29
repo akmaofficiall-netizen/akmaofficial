@@ -495,7 +495,13 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     if (!viewingInvoice) return;
     setDownloadingJpg(true);
     try {
-      await downloadInvoiceJpg(viewingInvoice, printAreaRef.current);
+      await downloadInvoiceJpg(
+        {
+          ...viewingInvoice,
+          sellerInfo: systemSettings,
+        },
+        printAreaRef.current
+      );
     } finally {
       setDownloadingJpg(false);
     }
@@ -503,7 +509,10 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
 
   const handlePrintInvoice = () => {
     if (!viewingInvoice) return;
-    triggerInvoicePrint(viewingInvoice);
+    triggerInvoicePrint({
+      ...viewingInvoice,
+      sellerInfo: systemSettings,
+    });
   };
 
   const calculateSubtotal = () => {
