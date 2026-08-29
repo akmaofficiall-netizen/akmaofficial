@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { db } from "@/db";
 import {
   invoices,
@@ -48,16 +49,20 @@ export interface CreateInvoiceInput {
 }
 
 /**
- * Generates a concurrency-safe unique invoice number
+ * Generates a concurrency-safe unique invoice number using counter-based approach
  */
 export async function generateInvoiceNumber(): Promise<string> {
   const datePrefix = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-  const candidate = `INV-${datePrefix}-${randomSuffix}`;
+  // Use a combination of timestamp and crypto random for better uniqueness
+  const timestamp = Date.now().toString(36);
+  const randomSuffix = crypto.randomBytes(3).toString("hex");
+  const candidate = `INV-${datePrefix}-${timestamp}${randomSuffix}`;
 
   const [existing] = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.invoiceNumber, candidate)).limit(1);
   if (existing) {
-    return generateInvoiceNumber(); // Retry on rare collision
+    // Fallback: use db-level sequence approach
+    const fallback = `INV-${datePrefix}-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+    return fallback;
   }
   return candidate;
 }
@@ -87,7 +92,10 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
       const resolvedPrice = await resolveProductPrice(product.id, input.projectId);
       const unitPrice = itemInput.unitPrice !== undefined ? itemInput.unitPrice : resolvedPrice.effectivePrice;
-      const unitCost = Number(product.calculatedCost) || Number(product.basePrice) * 0.7 || 0;
+      if (!unitPrice || unitPrice <= 0) {
+        throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است (باید بزرگتر از صفر باشد).`);
+      }
+      const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
       const qty = itemInput.quantity;
       const disc = itemInput.discountAmount || 0;
 
@@ -333,12 +341,22 @@ export async function reverseInvoice(invoiceId: string, reason: string) {
 
     for (const pay of associatedPayments) {
       if (pay.status === "completed") {
-        // Reverse account balance
+        // Reverse account balance with balance check
         if (pay.accountId) {
-          await tx
-            .update(accounts)
-            .set({ balance: sql`${accounts.balance} - ${Number(pay.amount)}` })
-            .where(eq(accounts.id, pay.accountId));
+          const [acc] = await tx.select().from(accounts).where(eq(accounts.id, pay.accountId)).for("update").limit(1);
+          if (acc) {
+            const currentBalance = Number(acc.balance) || 0;
+            const payAmount = Number(pay.amount) || 0;
+            if (currentBalance < payAmount) {
+              throw new Error(
+                `موجودی حساب «${acc.name}» برای ابطال پرداخت کافی نیست. موجودی فعلی: ${currentBalance.toLocaleString("fa-IR")} تومان، مبلغ پرداخت: ${payAmount.toLocaleString("fa-IR")} تومان.`
+              );
+            }
+            await tx
+              .update(accounts)
+              .set({ balance: sql`${accounts.balance} - ${payAmount}` })
+              .where(eq(accounts.id, pay.accountId));
+          }
         }
 
         // Mark payment as reversed
@@ -411,20 +429,81 @@ export async function updateInvoice(
 
     if (input.employeeId !== undefined) {
       patch.employeeId = input.employeeId || null;
-      // Update commission attribution if employee changed
+      // Recalculate commission attribution if employee changed
       if (input.employeeId !== existing.employeeId) {
+        // Delete old commission entries
+        await tx
+          .delete(commissionLedger)
+          .where(eq(commissionLedger.invoiceId, invoiceId));
+
+        // Recalculate commission for new employee if assigned
         if (input.employeeId) {
-          await tx
-            .update(commissionLedger)
-            .set({
-              employeeId: input.employeeId,
-              recipientEmployeeId: input.employeeId,
-            })
-            .where(eq(commissionLedger.invoiceId, invoiceId));
-        } else {
-          await tx
-            .delete(commissionLedger)
-            .where(eq(commissionLedger.invoiceId, invoiceId));
+          const [emp] = await tx.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1);
+          if (emp) {
+            const invItems = await tx.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+            const rules = await tx.select().from(commissionRules).where(eq(commissionRules.isActive, true));
+            const inv = await tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+            const invoiceRecord = inv[0];
+
+            if (invoiceRecord && invItems.length > 0) {
+              let totalCommission = 0;
+              const snapshots: Array<Record<string, unknown>> = [];
+
+              for (const item of invItems) {
+                const lineTotal = Number(item.lineTotal) || 0;
+                const lineProfit = Number(item.lineProfit) || 0;
+
+                const eligible = rules
+                  .filter((rule: any) => {
+                    if (rule.employeeId && rule.employeeId !== input.employeeId) return false;
+                    if (rule.projectId && rule.projectId !== invoiceRecord.projectId) return false;
+                    if (rule.productId && rule.productId !== item.productId) return false;
+                    const now = invoiceRecord.invoiceDate || new Date();
+                    if (rule.effectiveStartDate && now < rule.effectiveStartDate) return false;
+                    if (rule.effectiveEndDate && now > rule.effectiveEndDate) return false;
+                    return true;
+                  })
+                  .sort((a: any, b: any) => {
+                    const score = (r: any) => (r.employeeId ? 8 : 0) + (r.projectId ? 4 : 0) + (r.productId ? 2 : 0);
+                    return score(b) - score(a);
+                  });
+
+                const rule = eligible[0];
+                const rate = rule ? Number(rule.rateValue) : Number(emp.commissionRatePercent) || 5;
+                const commissionBase = rule?.commissionBase || (emp as any).commissionBase || "sales_total";
+                const base = commissionBase === "net_profit" ? Math.max(0, lineProfit) : lineTotal;
+                const amount = rule?.ruleType === "fixed" ? rate : Math.round((base * rate) / 100);
+                totalCommission += amount;
+                snapshots.push({
+                  productId: item.productId,
+                  ruleId: rule?.id || null,
+                  ruleType: rule?.ruleType || "employee_default",
+                  commissionBase,
+                  rateValue: rate,
+                  baseAmount: base,
+                  lineTotal,
+                  lineProfit,
+                  commissionAmount: amount,
+                });
+              }
+
+              if (totalCommission > 0) {
+                const primaryBase = (emp as any).commissionBase || "sales_total";
+                await tx.insert(commissionLedger).values({
+                  employeeId: input.employeeId,
+                  invoiceId: invoiceRecord.id,
+                  projectId: invoiceRecord.projectId || null,
+                  ruleSnapshot: { invoiceNumber: invoiceRecord.invoiceNumber, commissionBase: primaryBase, items: snapshots },
+                  baseAmount: (primaryBase === "net_profit" ? Number(invoiceRecord.grossProfitTotal) : Number(invoiceRecord.grandTotal)).toString(),
+                  commissionAmount: totalCommission.toString(),
+                  status: "pending",
+                  commissionType: "employee",
+                  recipientEmployeeId: input.employeeId,
+                  notes: `پورسانت بازنگری شده فاکتور #${invoiceRecord.invoiceNumber}`,
+                });
+              }
+            }
+          }
         }
       }
     }
@@ -476,7 +555,7 @@ export async function updateInvoice(
 
         const resolvedPrice = await resolveProductPrice(product.id, effectiveProjectId);
         const unitPrice = itemInput.unitPrice !== undefined ? itemInput.unitPrice : resolvedPrice.effectivePrice;
-        const unitCost = Number(product.calculatedCost) || Number(product.basePrice) * 0.7 || 0;
+        const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
         const qty = itemInput.quantity;
         const disc = itemInput.discountAmount || 0;
 
@@ -598,7 +677,7 @@ export async function deleteInvoice(invoiceId: string, reason?: string) {
       throw new Error("فاکتور مورد نظر یافت نشد.");
     }
 
-    // 1. If invoice was not cancelled/reversed, restore stock for products
+    // 1. If invoice was not cancelled/reversed, restore stock for products AND reverse payments
     if (existing.status !== "cancelled" && existing.status !== "reversed") {
       const items = await tx.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
       for (const item of items) {
@@ -616,6 +695,25 @@ export async function deleteInvoice(invoiceId: string, reason?: string) {
           },
           tx
         );
+      }
+
+      // Reverse any completed payments linked to this invoice
+      const linkedPayments = await tx
+        .select()
+        .from(payments)
+        .where(eq(payments.invoiceId, invoiceId));
+
+      for (const pay of linkedPayments) {
+        if (pay.status === "completed" && pay.accountId) {
+          await tx
+            .update(accounts)
+            .set({ balance: sql`${accounts.balance} - ${Number(pay.amount) || 0}` })
+            .where(eq(accounts.id, pay.accountId));
+        }
+        await tx
+          .update(payments)
+          .set({ status: "cancelled", notes: sql`COALESCE(notes, '') || ' (ابطال بابت حذف فاکتور #${existing.invoiceNumber})'` })
+          .where(eq(payments.id, pay.id));
       }
     }
 

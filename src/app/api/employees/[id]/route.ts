@@ -5,6 +5,8 @@ import { employees, employeeProjectAssignments, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { logAuditEvent } from "@/services/audit";
 
+const FORBIDDEN_ROLE_ESCALATION = ["admin"];
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -43,7 +45,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         address: body.address ?? before.address,
         description: body.description ?? before.description,
         cooperationType: body.cooperationType ?? before.cooperationType,
-        role: body.role ?? before.role,
+        role: body.role !== undefined && FORBIDDEN_ROLE_ESCALATION.includes(body.role) && before.role !== "admin"
+          ? before.role
+          : (body.role ?? before.role),
         status: body.status ?? before.status,
         activityScope: body.activityScope ?? before.activityScope,
         managerId: body.managerId ?? before.managerId,

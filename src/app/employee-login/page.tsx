@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, ShieldCheck, UserCheck, Calculator, KeyRound, User, Sparkles } from "lucide-react";
+import { LogIn, ShieldCheck, KeyRound, User } from "lucide-react";
 
 export default function EmployeeLoginPage() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function EmployeeLoginPage() {
         return;
       }
 
-      const roleCode = res.role?.code || res.employee?.role || "visitor";
+      const roleCode = res.role?.code || "visitor";
 
       if (roleCode === "admin" || roleCode === "manager") {
         router.push("/");
@@ -82,7 +82,7 @@ export default function EmployeeLoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="مثال: akmaadmin یا visitor1 یا accountant1"
+              placeholder="نام کاربری یا شماره همراه"
               className="w-full rounded-xl bg-slate-950 border border-slate-800 p-3 text-xs text-white placeholder-slate-500 focus:border-purple-500 outline-none font-mono"
             />
           </div>
@@ -117,37 +117,11 @@ export default function EmployeeLoginPage() {
           </button>
         </form>
 
-        {/* Quick Role-based Demo Access */}
+        {/* Security notice */}
         <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 space-y-2.5">
           <p className="text-[11px] text-slate-400 text-center font-medium">
-            ورود سریع بر اساس نقش کاربری:
+            نکته امنیتی: حساب‌های پیش‌فرض فقط از طریق متغیرهای محیطی INITIAL_ADMIN_USERNAME و INITIAL_ADMIN_PASSWORD قابل ایجاد هستند. برای ورود سریع در محیط توسعه، این مقادیر را در فایل .env تنظیم کنید.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleLogin("akmaadmin", "AkmaAdmin@2026")}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 border border-slate-700 p-2.5 text-xs text-purple-300 hover:bg-purple-950/40 hover:border-purple-500/40 transition"
-            >
-              <ShieldCheck className="h-4 w-4 text-purple-400" />
-              <span className="font-bold">ورود مدیر کل</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleLogin("visitor1", "Visitor@123")}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 border border-slate-700 p-2.5 text-xs text-cyan-300 hover:bg-cyan-950/40 hover:border-cyan-500/40 transition"
-            >
-              <UserCheck className="h-4 w-4 text-cyan-400" />
-              <span className="font-bold">ورود ویزیتور</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleLogin("accountant1", "Accountant@123")}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 border border-slate-700 p-2.5 text-xs text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/40 transition"
-            >
-              <Calculator className="h-4 w-4 text-emerald-400" />
-              <span className="font-bold">ورود حسابدار</span>
-            </button>
-          </div>
         </div>
       </div>
     </main>

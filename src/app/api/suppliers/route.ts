@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "نام تامین کننده و شماره موبایل الزامی است." }, { status: 400 });
     }
 
-    const code = body.code || `SUP-${Math.floor(10 + Math.random() * 90)}`;
+    const code = body.code || `SUP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const [created] = await db
       .insert(suppliers)

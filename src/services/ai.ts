@@ -42,7 +42,7 @@ async function getGeminiApiKey(): Promise<string> {
     .where(eq(systemSettings.id, "main_config"))
     .limit(1);
 
-  const key = process.env.GEMINI_API_KEY || settings?.openaiApiKey;
+  const key = process.env.GEMINI_API_KEY || settings?.geminiApiKey || settings?.openaiApiKey;
   if (!key) {
     throw new Error(
       "کلید Gemini تنظیم نشده است. لطفاً مقدار GEMINI_API_KEY را در Environment Variables یا تنظیمات وارد نمایید."

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { logAuditEvent } from "./audit";
 
 export interface AIActionPayload {
@@ -29,10 +29,15 @@ export async function executeAIAction(action: AIActionPayload, userId?: string) 
     case "APPLY_INFLATION_PRODUCTS": {
       const percent = validatePercent(Number(parameters.percent || parameters.percentage || 0));
       if (percent === 0) throw new Error("درصد تغییر قیمت محصولات نامعتبر است.");
+      // Only apply to active products, optionally filtered by category
+      const categoryFilter = parameters.category || null;
 
       return await db.transaction(async (tx) => {
         const multiplier = 1 + percent / 100;
-        const allProducts = await tx.select().from(schema.products);
+        const conditions = [eq(schema.products.status, "active")];
+        const allProducts = categoryFilter
+          ? await tx.select().from(schema.products).where(and(eq(schema.products.status, "active"), eq(schema.products.category, categoryFilter)))
+          : await tx.select().from(schema.products).where(eq(schema.products.status, "active"));
         let updatedCount = 0;
 
         for (const prod of allProducts) {
@@ -75,10 +80,10 @@ export async function executeAIAction(action: AIActionPayload, userId?: string) 
     case "APPLY_INFLATION_RAW_MATERIALS": {
       const percent = validatePercent(Number(parameters.percent || parameters.percentage || 0));
       if (percent === 0) throw new Error("درصد تغییر قیمت مواد اولیه نامعتبر است.");
-
+      // Only apply to active raw materials
       return await db.transaction(async (tx) => {
         const multiplier = 1 + percent / 100;
-        const allMaterials = await tx.select().from(schema.rawMaterials);
+        const allMaterials = await tx.select().from(schema.rawMaterials).where(eq(schema.rawMaterials.status, "active"));
         let updatedCount = 0;
 
         for (const rm of allMaterials) {

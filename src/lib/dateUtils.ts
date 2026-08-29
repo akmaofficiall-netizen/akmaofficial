@@ -364,7 +364,7 @@ export function isValidJalaliDate(str: string): boolean {
   const parts = str.split(/[\/\-]/).map((s) => parseInt(toLatinDigits(s.trim()), 10));
   if (parts.length !== 3 || parts.some(isNaN)) return false;
   const [year, month, day] = parts;
-  if (year < 1000 || year > 2000) return false;
+  if (year < 1000 || year > 1600) return false;
   if (month < 1 || month > 12) return false;
   if (day < 1 || day > 31) return false;
   return true;

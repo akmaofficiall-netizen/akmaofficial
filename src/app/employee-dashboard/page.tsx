@@ -106,7 +106,7 @@ export default function EmployeeDashboardPage() {
       // If admin, they can go to master or stay here
       const isAccountant = currentRole === "accountant" || currentRole === "manager" || currentRole === "admin";
 
-      const [d, c, i, cat, pay] = await Promise.all([
+      const [d, c, i, cat, pay] = await Promise.allSettled([
         fetch(`/api/employees/${m.employee.id}/dashboard`, { cache: "no-store" }).then((x) => x.json()),
         fetch(`/api/customers${isAccountant ? "" : "?mine=1"}`, { cache: "no-store" }).then((x) => x.json()),
         fetch(`/api/invoices${isAccountant ? "" : "?mine=1"}`, { cache: "no-store" }).then((x) => x.json()),
@@ -114,11 +114,11 @@ export default function EmployeeDashboardPage() {
         fetch("/api/payments", { cache: "no-store" }).then((x) => x.json()),
       ]);
 
-      if (d.success) setDash(d.dashboard);
-      if (c.success) setCustomers(c.customers || []);
-      if (i.success) setInvoices(i.invoices || []);
-      if (cat.success) setCatalog(cat);
-      if (pay.success) setPayments(pay.payments || []);
+      if (d.status === "fulfilled" && d.value.success) setDash(d.value.dashboard);
+      if (c.status === "fulfilled" && c.value.success) setCustomers(c.value.customers || []);
+      if (i.status === "fulfilled" && i.value.success) setInvoices(i.value.invoices || []);
+      if (cat.status === "fulfilled" && cat.value.success) setCatalog(cat.value);
+      if (pay.status === "fulfilled" && pay.value.success) setPayments(pay.value.payments || []);
     } catch (e: any) {
       setError(e?.message || "خطا در دریافت اطلاعات");
     } finally {

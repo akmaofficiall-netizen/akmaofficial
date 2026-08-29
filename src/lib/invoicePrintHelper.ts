@@ -1,6 +1,16 @@
 import { toJalaliDate, formatMoney, formatRial, formatNumber } from "@/lib/dateUtils";
 import { numberToPersianWords } from "@/lib/numberToWords";
 
+function escapeHtml(str: string | null | undefined): string {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export interface SellerInfo {
   businessName?: string | null;
   economicCode?: string | null;
@@ -54,14 +64,14 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
   const paidNum = Number(invoice.paidAmount) || 0;
   const balanceNum = Number(invoice.balanceDue) || 0;
 
-  const sellerName = sellerInfo?.businessName || "سازمان و صنایع بازرگانی حکمت آکما";
-  const economicCode = sellerInfo?.economicCode || "";
-  const nationalId = sellerInfo?.nationalId || "";
-  const regNumber = sellerInfo?.registrationNumber || "";
-  const postalCode = sellerInfo?.postalCode || "";
-  const address = sellerInfo?.companyAddress || "";
-  const phone = sellerInfo?.companyPhone || "";
-  const taxOffice = sellerInfo?.taxOffice || "";
+  const sellerName = escapeHtml(sellerInfo?.businessName || "سازمان و صنایع بازرگانی حکمت آکما");
+  const economicCode = escapeHtml(sellerInfo?.economicCode || "");
+  const nationalId = escapeHtml(sellerInfo?.nationalId || "");
+  const regNumber = escapeHtml(sellerInfo?.registrationNumber || "");
+  const postalCode = escapeHtml(sellerInfo?.postalCode || "");
+  const address = escapeHtml(sellerInfo?.companyAddress || "");
+  const phone = escapeHtml(sellerInfo?.companyPhone || "");
+  const taxOffice = escapeHtml(sellerInfo?.taxOffice || "");
 
   let contactLine = "";
   if (address && phone) {
@@ -80,11 +90,11 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
     <tr style="border-bottom: 1px solid #cbd5e1;">
       <td style="padding: 7px 6px; text-align: center; font-weight: bold; border-left: 1px solid #cbd5e1; color: #0f172a;">${idx + 1}</td>
       <td style="padding: 7px 8px; font-weight: bold; border-left: 1px solid #cbd5e1; color: #0f172a; text-align: right;">
-        ${item.productNameSnapshot}
-        ${item.productCode ? `<span style="font-size: 10px; color: #475569; margin-right: 4px;">[${item.productCode}]</span>` : ""}
+        ${escapeHtml(item.productNameSnapshot)}
+        ${item.productCode ? `<span style="font-size: 10px; color: #475569; margin-right: 4px;">[${escapeHtml(item.productCode)}]</span>` : ""}
       </td>
       <td style="padding: 7px 6px; text-align: center; font-weight: bold; border-left: 1px solid #cbd5e1; color: #0f172a;">${formatNumber(item.quantity)}</td>
-      <td style="padding: 7px 6px; text-align: center; border-left: 1px solid #cbd5e1; color: #0f172a;">${item.productUnit || "عدد"}</td>
+      <td style="padding: 7px 6px; text-align: center; border-left: 1px solid #cbd5e1; color: #0f172a;">${escapeHtml(item.productUnit || "عدد")}</td>
       <td style="padding: 7px 8px; text-align: left; border-left: 1px solid #cbd5e1; color: #0f172a; font-weight: bold;">${formatMoney(item.unitPrice, "")}</td>
       <td style="padding: 7px 8px; text-align: left; border-left: 1px solid #cbd5e1; color: #0f172a; font-weight: bold;">${formatMoney(item.discountAmount || 0, "")}</td>
       <td style="padding: 7px 8px; text-align: left; font-weight: bold; color: #0f172a;">${formatMoney(item.lineTotal, "")}</td>
@@ -98,7 +108,7 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>فاکتور فروش شماره ${invoice.invoiceNumber || "رسمی"}</title>
+  <title>فاکتور فروش شماره ${escapeHtml(invoice.invoiceNumber || "رسمی")}</title>
   <style>
     @page {
       size: A4 portrait;
@@ -279,7 +289,7 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
         <div class="org-sub">صورتحساب فروش کالا و خدمات (فاکتور رسمی تجاری)</div>
       </div>
       <div class="meta-box">
-        <div><span style="color: #475569;">شماره فاکتور: </span><strong style="color: #0f172a;">${invoice.invoiceNumber || "—"}</strong></div>
+        <div><span style="color: #475569;">شماره فاکتور: </span><strong style="color: #0f172a;">${escapeHtml(invoice.invoiceNumber || "—")}</strong></div>
         <div style="margin-top: 3px;"><span style="color: #475569;">تاریخ صدور: </span><strong style="color: #0f172a;">${toJalaliDate(invoice.invoiceDate)}</strong></div>
       </div>
     </div>
@@ -300,9 +310,9 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       </div>
       <div class="info-card">
         <div class="card-title">مشخصات خریدار</div>
-        <div><span style="color: #475569;">نام خریدار / فروشگاه: </span><strong style="color: #0f172a;">${invoice.customerName || "—"} ${invoice.customerStore ? `(${invoice.customerStore})` : ""}</strong></div>
-        <div><span style="color: #475569;">شماره تماس: </span><span style="color: #0f172a; font-weight: bold;">${invoice.customerMobile || "—"}</span></div>
-        <div><span style="color: #475569;">نشانی: </span><span style="color: #0f172a;">${invoice.customerAddress || "تهران - تحویل حضوری"}</span></div>
+        <div><span style="color: #475569;">نام خریدار / فروشگاه: </span><strong style="color: #0f172a;">${escapeHtml(invoice.customerName || "—")} ${invoice.customerStore ? `(${escapeHtml(invoice.customerStore)})` : ""}</strong></div>
+        <div><span style="color: #475569;">شماره تماس: </span><span style="color: #0f172a; font-weight: bold;">${escapeHtml(invoice.customerMobile || "—")}</span></div>
+        <div><span style="color: #475569;">نشانی: </span><span style="color: #0f172a;">${escapeHtml(invoice.customerAddress || "تهران - تحویل حضوری")}</span></div>
       </div>
     </div>
 

@@ -22,10 +22,17 @@ export async function recalculateCustomerHealth(customerId: string): Promise<{
   const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
   if (!customer) throw new Error("مشتری یافت نشد");
 
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
   const customerInvoices = await db
     .select()
     .from(invoices)
-    .where(and(eq(invoices.customerId, customerId), eq(invoices.status, "issued")));
+    .where(and(
+      eq(invoices.customerId, customerId),
+      eq(invoices.status, "issued"),
+      sql`${invoices.invoiceDate} >= ${oneYearAgo}`
+    ));
 
   const now = new Date();
   let daysSinceLastPurchase = 999;

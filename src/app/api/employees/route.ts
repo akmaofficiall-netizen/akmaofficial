@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "نام و شماره موبایل کارمند الزامی است." }, { status: 400 });
     }
 
-    const code = body.code || `EMP-${Date.now().toString().slice(-6)}`;
+    const code = body.code || `EMP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const [created] = await db
       .insert(employees)

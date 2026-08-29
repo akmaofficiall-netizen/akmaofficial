@@ -65,7 +65,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       if (oldAccountId === newAccountId && newAccountId) {
         const diff = newAmount - oldAmount;
         if (diff > 0) {
-          const [acc] = await tx.select().from(accounts).where(eq(accounts.id, newAccountId)).limit(1);
+          // Increasing expense amount: check if account has enough balance
+          const [acc] = await tx.select().from(accounts).where(eq(accounts.id, newAccountId)).for("update").limit(1);
           if (!acc) throw new Error("حساب مالی یافت نشد.");
           const currentBalance = Number(acc.balance) || 0;
           if (currentBalance < diff) {
@@ -74,19 +75,27 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             );
           }
         }
-        await tx
-          .update(accounts)
-          .set({ balance: sql`${accounts.balance} - ${diff}` })
-          .where(eq(accounts.id, newAccountId));
-      } else {
-        if (oldAccountId) {
+        // For diff < 0 (decreasing expense), balance increases so no check needed
+        // For diff === 0, no change needed
+        if (diff !== 0) {
           await tx
             .update(accounts)
-            .set({ balance: sql`${accounts.balance} + ${oldAmount}` })
-            .where(eq(accounts.id, oldAccountId));
+            .set({ balance: sql`${accounts.balance} - ${diff}` })
+            .where(eq(accounts.id, newAccountId));
+        }
+      } else {
+        if (oldAccountId) {
+          // Use FOR UPDATE to prevent race conditions
+          const [oldAcc] = await tx.select().from(accounts).where(eq(accounts.id, oldAccountId)).for("update").limit(1);
+          if (oldAcc) {
+            await tx
+              .update(accounts)
+              .set({ balance: sql`${accounts.balance} + ${oldAmount}` })
+              .where(eq(accounts.id, oldAccountId));
+          }
         }
         if (newAccountId) {
-          const [newAcc] = await tx.select().from(accounts).where(eq(accounts.id, newAccountId)).limit(1);
+          const [newAcc] = await tx.select().from(accounts).where(eq(accounts.id, newAccountId)).for("update").limit(1);
           if (!newAcc) throw new Error("حساب جدید یافت نشد.");
           const newBalance = Number(newAcc.balance) || 0;
           if (newBalance < newAmount) {

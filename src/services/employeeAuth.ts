@@ -9,8 +9,12 @@ const secret = () => {
   if (process.env.NODE_ENV === "production") {
     throw new Error("AUTH_SECRET در محیط Production تنظیم نشده است. لطفاً متغیر محیطی AUTH_SECRET را تنظیم کنید.");
   }
-  console.warn("⚠️ AUTH_SECRET تنظیم نشده است. از رمز پیش‌فرض استفاده می‌شود (فقط در محیط توسعه).");
-  return "AKMA_DEV_AUTH_SECRET";
+  // In development, generate a random secret per process instance for safety
+  if (!globalThis.__akmaDevAuthSecret) {
+    globalThis.__akmaDevAuthSecret = crypto.randomBytes(32).toString("hex");
+  }
+  console.warn("⚠️ AUTH_SECRET تنظیم نشده است. از رمز تصادفی توسعه استفاده می‌شود (فقط در محیط توسعه).");
+  return globalThis.__akmaDevAuthSecret;
 };
 
 export function hashPassword(password: string) {

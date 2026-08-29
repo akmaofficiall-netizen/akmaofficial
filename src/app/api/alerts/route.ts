@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { alerts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { runAlertsEngineScan, getActiveAlerts } from "@/services/alerts";
 import { requirePermission } from "@/services/access";
 
@@ -27,6 +27,11 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     if (body.action === "resolve" && body.alertId) {
+      const alert = await db.select().from(alerts).where(eq(alerts.id, body.alertId)).limit(1);
+      if (alert.length === 0) {
+        return NextResponse.json({ success: false, error: "هشدار یافت نشد" }, { status: 404 });
+      }
+
       await db
         .update(alerts)
         .set({ status: "resolved", updatedAt: new Date() })

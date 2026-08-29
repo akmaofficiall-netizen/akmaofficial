@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { products, projectProductPrices, productRecipes, rawMaterials } from "@/db/schema";
-import { eq, and, desc, lte, or, isNull } from "drizzle-orm";
+import { eq, and, desc, lte, gte, or, isNull } from "drizzle-orm";
 
 export interface ResolvedPriceResult {
   productId: string;
@@ -49,7 +49,8 @@ export async function resolveProductPrice(
     .where(and(
       eq(projectProductPrices.projectId, projectId),
       eq(projectProductPrices.productId, productId),
-      or(isNull(projectProductPrices.effectiveStartDate), lte(projectProductPrices.effectiveStartDate, new Date()))
+      or(isNull(projectProductPrices.effectiveStartDate), lte(projectProductPrices.effectiveStartDate, new Date())),
+      or(isNull(projectProductPrices.effectiveEndDate), gte(projectProductPrices.effectiveEndDate, new Date()))
     ))
     .orderBy(desc(projectProductPrices.effectiveStartDate), desc(projectProductPrices.updatedAt))
     .limit(1);
