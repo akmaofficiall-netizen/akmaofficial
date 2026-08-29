@@ -38,8 +38,17 @@ import { numberToPersianWords } from "@/lib/numberToWords";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
-export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
-  const [activeTab, setActiveTab] = useState<"financial" | "tax_declaration" | "sales" | "inflation" | "comparison">("financial");
+export const ReportsView: React.FC<{
+  selectedProjectId: string | null;
+  initialTab?: "financial" | "tax_declaration" | "sales" | "inflation" | "comparison";
+}> = ({ selectedProjectId, initialTab = "financial" }) => {
+  const [activeTab, setActiveTab] = useState<"financial" | "tax_declaration" | "sales" | "inflation" | "comparison">(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [financialData, setFinancialData] = useState<any>(null);
   const [salesData, setSalesData] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);

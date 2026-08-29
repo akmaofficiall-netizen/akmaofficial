@@ -57,6 +57,8 @@ export default function HomePage() {
         return <ProjectManagementView />;
       case "reports":
         return <ReportsView selectedProjectId={selectedProjectId} />;
+      case "tax_declaration":
+        return <ReportsView selectedProjectId={selectedProjectId} initialTab="tax_declaration" />;
       case "alerts":
         return <AlertsView selectedProjectId={selectedProjectId} />;
       case "ai":

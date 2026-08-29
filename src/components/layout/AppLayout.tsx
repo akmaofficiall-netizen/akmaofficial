@@ -23,7 +23,8 @@ import {
   Search,
   X,
   Menu,
-  ChevronDown
+  ChevronDown,
+  FileSpreadsheet
 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -103,6 +104,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     { id: "employees", label: "همکاران و ویزیتورها", icon: UserCheck },
     { id: "projects", label: "پروژه‌ها و Scope", icon: FolderKanban },
     { id: "reports", label: "مرکز گزارشات و سود", icon: BarChart2 },
+    { id: "tax_declaration", label: "اظهارنامه مالیاتی رسمی", icon: FileSpreadsheet },
     { id: "alerts", label: "مرکز اعلانات", icon: AlertTriangle },
     { id: "ai", label: "مشاور هوش مصنوعی", icon: Bot },
     { id: "backup", label: "پشتیبان‌گیری دیتابیس", icon: Database },
@@ -113,6 +115,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     invoices: "invoices.view", raw_materials: "raw_materials.view", products: "products.view", production: "production.view",
     inventory: "inventory.view", customers: "customers.view", customer_map: "customers.view", purchases: "purchases.view",
     financial: "financial.view", employees: "employees.view", projects: "projects.view", reports: "reports.view",
+    tax_declaration: "reports.view",
     alerts: "alerts.view", ai: "ai.view", backup: "backup.view", settings: "settings.view",
   };
   const perms = new Set<string>(me?.permissions || []);
