@@ -40,6 +40,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   const [products, setProducts] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter
@@ -98,13 +99,14 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     setLoading(true);
     try {
       const projParam = selectedProjectId ? `?projectId=${selectedProjectId}` : "";
-      const [invRes, custRes, projRes, prodRes, accRes, empRes] = await Promise.all([
+      const [invRes, custRes, projRes, prodRes, accRes, empRes, settRes] = await Promise.all([
         fetch(`/api/invoices${projParam}`).then((r) => r.json()),
         fetch("/api/customers").then((r) => r.json()),
         fetch("/api/projects").then((r) => r.json()),
         fetch(selectedProjectId ? `/api/products?projectId=${selectedProjectId}` : "/api/products").then((r) => r.json()),
         fetch("/api/accounts").then((r) => r.json()),
         fetch("/api/employees").then((r) => r.json()),
+        fetch("/api/settings").then((r) => r.json()),
       ]);
 
       if (invRes.success) setInvoices(invRes.invoices || []);
@@ -113,6 +115,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       if (prodRes.success) setProducts(prodRes.products || []);
       if (accRes.success) setAccounts(accRes.accounts || []);
       if (empRes.success) setEmployees(empRes.employees || []);
+      if (settRes?.success && settRes.settings) setSystemSettings(settRes.settings);
     } catch (err) {
       console.error("Error fetching invoices:", err);
     } finally {
@@ -1323,9 +1326,9 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <h1 className="text-lg font-black tracking-tight text-slate-900" style={{ color: "#0f172a" }}>
-                      سازمان و صنایع بازرگانی حکمت آکما
+                      {systemSettings?.businessName || "سازمان و صنایع بازرگانی حکمت آکما"}
                     </h1>
-                    <p className="text-[11px] text-slate-600" style={{ color: "#475569" }}>
+                    <p className="text-[11px] text-slate-600 font-medium" style={{ color: "#475569" }}>
                       صورتحساب فروش کالا و خدمات (فاکتور رسمی تجاری)
                     </p>
                   </div>
@@ -1339,12 +1342,6 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                       <span className="text-slate-500" style={{ color: "#64748b" }}>تاریخ صدور: </span>
                       <span className="font-bold text-slate-900" style={{ color: "#0f172a" }}>{toJalaliDate(viewingInvoice.invoice.invoiceDate)}</span>
                     </div>
-                    {viewingInvoice.invoice.projectName && (
-                      <div>
-                        <span className="text-slate-500" style={{ color: "#64748b" }}>پروژه: </span>
-                        <span className="font-semibold text-purple-700" style={{ color: "#7e22ce" }}>{viewingInvoice.invoice.projectName}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1357,9 +1354,49 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                     <Building className="h-3.5 w-3.5 text-slate-700" />
                     مشخصات فروشنده
                   </div>
-                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>نام فروشنده: </span><span className="font-bold" style={{ color: "#0f172a" }}>شرکت حکمت آکما</span></div>
-                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>کد اقتصادی: </span><span className="font-mono" style={{ color: "#0f172a" }}>۴۱۱۵۸۹۳۲۴۷۸۵</span> | <span className="text-slate-500" style={{ color: "#64748b" }}>شناسه ملی: </span><span className="font-mono" style={{ color: "#0f172a" }}>۱۰۳۸۰۴۵۹۶۱۰</span></div>
-                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>نشانی و تلفن: </span><span style={{ color: "#0f172a" }}>دفتر مرکزی - تلفن: ۰۲۱-۸۸۹۹۰۰۱۱</span></div>
+                  <div>
+                    <span className="text-slate-500" style={{ color: "#64748b" }}>نام فروشنده: </span>
+                    <span className="font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings?.businessName || "شرکت حکمت آکما"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500" style={{ color: "#64748b" }}>کد اقتصادی: </span>
+                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings?.economicCode || systemSettings?.taxNumber || "—"}</span>
+                    {" | "}
+                    <span className="text-slate-500" style={{ color: "#64748b" }}>شناسه ملی: </span>
+                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings?.nationalId || "—"}</span>
+                  </div>
+                  {(systemSettings?.registrationNumber || systemSettings?.postalCode) && (
+                    <div>
+                      {systemSettings?.registrationNumber && (
+                        <>
+                          <span className="text-slate-500" style={{ color: "#64748b" }}>شماره ثبت: </span>
+                          <span className="font-mono text-slate-900" style={{ color: "#0f172a" }}>{systemSettings.registrationNumber}</span>
+                          {" | "}
+                        </>
+                      )}
+                      {systemSettings?.postalCode && (
+                        <>
+                          <span className="text-slate-500" style={{ color: "#64748b" }}>کد پستی: </span>
+                          <span className="font-mono text-slate-900" style={{ color: "#0f172a" }}>{systemSettings.postalCode}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-500" style={{ color: "#64748b" }}>نشانی و تلفن: </span>
+                    <span className="text-slate-900" style={{ color: "#0f172a" }}>
+                      {systemSettings?.companyAddress ? (
+                        <>
+                          {systemSettings.companyAddress}
+                          {systemSettings.companyPhone ? ` - تلفن: ${systemSettings.companyPhone}` : ""}
+                        </>
+                      ) : systemSettings?.companyPhone ? (
+                        `تلفن: ${systemSettings.companyPhone}`
+                      ) : (
+                        "دفتر مرکزی - تلفن: ۰۲۱-۸۸۹۹۰۰۱۱"
+                      )}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Buyer Box */}
@@ -1368,9 +1405,9 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                     <User className="h-3.5 w-3.5 text-slate-700" />
                     مشخصات خریدار
                   </div>
-                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>نام خریدار / فروشگاه: </span><span className="font-bold" style={{ color: "#0f172a" }}>{viewingInvoice.invoice.customerName} {viewingInvoice.invoice.customerStore ? `(${viewingInvoice.invoice.customerStore})` : ""}</span></div>
-                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>شماره تماس / همراه: </span><span className="font-mono" style={{ color: "#0f172a" }}>{viewingInvoice.invoice.customerMobile || "—"}</span></div>
-                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>نشانی تحویل: </span><span style={{ color: "#0f172a" }}>{viewingInvoice.invoice.customerAddress || "تهران - ارسال حضوری"}</span></div>
+                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>نام خریدار / فروشگاه: </span><span className="font-bold text-slate-900" style={{ color: "#0f172a" }}>{viewingInvoice.invoice.customerName} {viewingInvoice.invoice.customerStore ? `(${viewingInvoice.invoice.customerStore})` : ""}</span></div>
+                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>شماره تماس / همراه: </span><span className="font-mono text-slate-900" style={{ color: "#0f172a" }}>{viewingInvoice.invoice.customerMobile || "—"}</span></div>
+                  <div><span className="text-slate-500" style={{ color: "#64748b" }}>نشانی تحویل: </span><span className="text-slate-900" style={{ color: "#0f172a" }}>{viewingInvoice.invoice.customerAddress || "تهران - ارسال حضوری"}</span></div>
                 </div>
               </div>
 
@@ -1391,15 +1428,15 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                   <tbody className="divide-y divide-slate-300 bg-white" style={{ backgroundColor: "#ffffff" }}>
                     {viewingInvoice.items.map((i: any, index: number) => (
                       <tr key={i.id || index} style={{ borderBottom: "1px solid #cbd5e1" }}>
-                        <td className="p-2 border-r border-slate-300 text-center font-bold text-slate-600" style={{ borderColor: "#cbd5e1", color: "#475569" }}>{index + 1}</td>
+                        <td className="p-2 border-r border-slate-300 text-center font-bold text-slate-700" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{index + 1}</td>
                         <td className="p-2 border-r border-slate-300 font-bold text-slate-900" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>
                           {i.productNameSnapshot}
-                          {i.productCode && <span className="text-[10px] text-slate-500 font-mono font-normal mr-2" style={{ color: "#64748b" }}>[{i.productCode}]</span>}
+                          {i.productCode && <span className="text-[10px] text-slate-600 font-mono font-normal mr-2" style={{ color: "#334155" }}>[{i.productCode}]</span>}
                         </td>
-                        <td className="p-2 border-r border-slate-300 text-center font-bold font-mono" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatNumber(i.quantity)}</td>
-                        <td className="p-2 border-r border-slate-300 text-center text-slate-600" style={{ borderColor: "#cbd5e1", color: "#475569" }}>{i.productUnit || "عدد"}</td>
-                        <td className="p-2 border-r border-slate-300 text-left font-mono" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatMoney(i.unitPrice, "")}</td>
-                        <td className="p-2 border-r border-slate-300 text-left font-mono" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatMoney(i.discountAmount || 0, "")}</td>
+                        <td className="p-2 border-r border-slate-300 text-center font-bold font-mono text-slate-900" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatNumber(i.quantity)}</td>
+                        <td className="p-2 border-r border-slate-300 text-center text-slate-700" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{i.productUnit || "عدد"}</td>
+                        <td className="p-2 border-r border-slate-300 text-left font-mono font-medium text-slate-900" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatMoney(i.unitPrice, "")}</td>
+                        <td className="p-2 border-r border-slate-300 text-left font-mono font-medium text-slate-900" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatMoney(i.discountAmount || 0, "")}</td>
                         <td className="p-2 text-left font-bold font-mono text-slate-900" style={{ color: "#0f172a" }}>{formatMoney(i.lineTotal, "")}</td>
                       </tr>
                     ))}
@@ -1407,48 +1444,42 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                 </table>
               </div>
 
-              {/* Financial Calculation Box */}
+              {/* Financial Calculation Box - ALL PRICES BLACK */}
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="border border-slate-300 rounded-xl p-3 bg-slate-50 text-[11px] space-y-2 flex flex-col justify-between" style={{ borderColor: "#cbd5e1", backgroundColor: "#f8fafc" }}>
                   <div>
-                    <div className="text-slate-500 font-semibold mb-1" style={{ color: "#64748b" }}>مبلغ کل قابل پرداخت به حروف:</div>
+                    <div className="text-slate-600 font-semibold mb-1" style={{ color: "#334155" }}>مبلغ کل قابل پرداخت به حروف:</div>
                     <div className="font-bold text-slate-900 leading-relaxed text-xs" style={{ color: "#0f172a" }}>
                       {numberToPersianWords(viewingInvoice.invoice.grandTotal, "تومان")}
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-1" style={{ color: "#64748b" }}>
+                    <div className="text-[10px] text-slate-600 mt-1 font-mono font-medium" style={{ color: "#334155" }}>
                       معادل: {formatRial(viewingInvoice.invoice.grandTotal)}
                     </div>
                   </div>
-
-                  {viewingInvoice.invoice.employeeName && (
-                    <div className="text-[11px] text-slate-600 border-t border-slate-200 pt-1" style={{ borderColor: "#e2e8f0", color: "#475569" }}>
-                      ویزیتور / نماینده فروش: <span className="font-bold text-slate-800" style={{ color: "#1e293b" }}>{viewingInvoice.invoice.employeeName}</span>
-                    </div>
-                  )}
                 </div>
 
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-50 text-[11px] space-y-1.5" style={{ borderColor: "#1e293b", backgroundColor: "#f8fafc" }}>
-                  <div className="flex justify-between text-slate-600" style={{ color: "#475569" }}>
+                  <div className="flex justify-between text-slate-900" style={{ color: "#0f172a" }}>
                     <span>جمع اقلام:</span>
-                    <span className="font-mono font-bold text-slate-800" style={{ color: "#1e293b" }}>{formatMoney(viewingInvoice.invoice.subtotal)}</span>
+                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{formatMoney(viewingInvoice.invoice.subtotal)}</span>
                   </div>
                   {Number(viewingInvoice.invoice.invoiceDiscount) > 0 && (
-                    <div className="flex justify-between text-rose-600" style={{ color: "#e11d48" }}>
+                    <div className="flex justify-between text-slate-900" style={{ color: "#0f172a" }}>
                       <span>تخفیف فاکتور:</span>
-                      <span className="font-mono">{formatMoney(viewingInvoice.invoice.invoiceDiscount)}</span>
+                      <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{formatMoney(viewingInvoice.invoice.invoiceDiscount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-900 font-black text-xs border-t border-slate-400 pt-1.5" style={{ borderColor: "#94a3b8", color: "#0f172a" }}>
                     <span>مبلغ کل فاکتور:</span>
-                    <span className="font-mono text-purple-900" style={{ color: "#581c87" }}>{formatMoney(viewingInvoice.invoice.grandTotal)}</span>
+                    <span className="font-mono font-black text-slate-900" style={{ color: "#0f172a" }}>{formatMoney(viewingInvoice.invoice.grandTotal)}</span>
                   </div>
-                  <div className="flex justify-between text-emerald-700 font-bold border-t border-slate-300 pt-1" style={{ borderColor: "#cbd5e1", color: "#047857" }}>
+                  <div className="flex justify-between text-slate-900 font-bold border-t border-slate-300 pt-1" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>
                     <span>مبلغ پرداخت شده:</span>
-                    <span className="font-mono">{formatMoney(viewingInvoice.invoice.paidAmount)}</span>
+                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{formatMoney(viewingInvoice.invoice.paidAmount)}</span>
                   </div>
-                  <div className="flex justify-between text-rose-700 font-bold" style={{ color: "#be123c" }}>
+                  <div className="flex justify-between text-slate-900 font-bold" style={{ color: "#0f172a" }}>
                     <span>مانده بدهی (طلب):</span>
-                    <span className="font-mono">{formatMoney(viewingInvoice.invoice.balanceDue)}</span>
+                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{formatMoney(viewingInvoice.invoice.balanceDue)}</span>
                   </div>
                 </div>
               </div>
@@ -1456,12 +1487,14 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
               {/* Signatures & Stamps */}
               <div className="grid grid-cols-2 gap-4 border-t-2 border-slate-800 pt-6 text-[11px]" style={{ borderColor: "#1e293b" }}>
                 <div className="text-center space-y-8">
-                  <span className="font-bold text-slate-700" style={{ color: "#334155" }}>مهر و امضای فروشنده (شرکت حکمت آکما)</span>
-                  <div className="h-10 border-b border-dashed border-slate-300 mx-10" style={{ borderColor: "#cbd5e1" }}></div>
+                  <span className="font-bold text-slate-900" style={{ color: "#0f172a" }}>
+                    مهر و امضای فروشنده ({systemSettings?.businessName || "شرکت حکمت آکما"})
+                  </span>
+                  <div className="h-10 border-b border-dashed border-slate-400 mx-10" style={{ borderColor: "#94a3b8" }}></div>
                 </div>
                 <div className="text-center space-y-8">
-                  <span className="font-bold text-slate-700" style={{ color: "#334155" }}>مهر و امضای خریدار / تحویل‌گیرنده کالا</span>
-                  <div className="h-10 border-b border-dashed border-slate-300 mx-10" style={{ borderColor: "#cbd5e1" }}></div>
+                  <span className="font-bold text-slate-900" style={{ color: "#0f172a" }}>مهر و امضای خریدار / تحویل‌گیرنده کالا</span>
+                  <div className="h-10 border-b border-dashed border-slate-400 mx-10" style={{ borderColor: "#94a3b8" }}></div>
                 </div>
               </div>
             </div>

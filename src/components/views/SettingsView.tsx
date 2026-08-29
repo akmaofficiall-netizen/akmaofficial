@@ -2,12 +2,21 @@
 
 import React, { useEffect, useState } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
-import { Settings, Save, RefreshCw, Key, ShieldCheck } from "lucide-react";
+import { Settings, Save, RefreshCw, Key, ShieldCheck, Building2, MapPin, Phone, FileText, Percent, CheckCircle2 } from "lucide-react";
 
 export const SettingsView: React.FC = () => {
   const [form, setForm] = useState({
     businessName: "سازمان و کسب‌وکار حکمت آکما",
     taxNumber: "",
+    economicCode: "",
+    nationalId: "",
+    registrationNumber: "",
+    postalCode: "",
+    companyAddress: "",
+    companyPhone: "",
+    taxOffice: "",
+    taxRateCorporate: 25,
+    vatRate: 10,
     currency: "تومان",
     healthGreenThreshold: 75,
     healthYellowThreshold: 50,
@@ -17,6 +26,7 @@ export const SettingsView: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -26,6 +36,15 @@ export const SettingsView: React.FC = () => {
         setForm({
           businessName: res.settings.businessName || "سازمان و کسب‌وکار حکمت آکما",
           taxNumber: res.settings.taxNumber || "",
+          economicCode: res.settings.economicCode || res.settings.taxNumber || "",
+          nationalId: res.settings.nationalId || "",
+          registrationNumber: res.settings.registrationNumber || "",
+          postalCode: res.settings.postalCode || "",
+          companyAddress: res.settings.companyAddress || "",
+          companyPhone: res.settings.companyPhone || "",
+          taxOffice: res.settings.taxOffice || "",
+          taxRateCorporate: res.settings.taxRateCorporate !== undefined ? res.settings.taxRateCorporate : 25,
+          vatRate: res.settings.vatRate !== undefined ? res.settings.vatRate : 10,
           currency: res.settings.currency || "تومان",
           healthGreenThreshold: res.settings.healthGreenThreshold || 75,
           healthYellowThreshold: res.settings.healthYellowThreshold || 50,
@@ -47,6 +66,7 @@ export const SettingsView: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSavedSuccess(false);
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -55,7 +75,8 @@ export const SettingsView: React.FC = () => {
       }).then((r) => r.json());
 
       if (res.success) {
-        alert("تنظیمات با موفقیت ذخیره گردید.");
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 4000);
       } else {
         alert(res.error || "خطا در ذخیره تنظیمات");
       }
@@ -75,74 +96,214 @@ export const SettingsView: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Settings className="h-6 w-6 text-slate-300" />
-            تنظیمات کسب‌وکار و هوش مصنوعی
+            <Settings className="h-6 w-6 text-cyan-400" />
+            تنظیمات کسب‌وکار، چاپ فاکتور و اظهارنامه مالیاتی
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            مشخصات حقوقی سازمان، آستانه‌های سلامت مشتریان CRM و پیکربندی کلید Gemini
+            مشخصات حقوقی سازمان، کد اقتصادی، شناسه ملی، نشانی و اطلاعات تماس (مستقیماً در چاپ فاکتورها و اظهارنامه مالیاتی درج می‌گردد)
           </p>
         </div>
+
+        {savedSuccess && (
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-950/80 border border-emerald-600/50 px-4 py-2 text-xs font-semibold text-emerald-300 animate-in fade-in">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            تنظیمات با موفقیت ذخیره و در فاکتورها اعمال شد.
+          </div>
+        )}
       </div>
 
-      <form onSubmit={handleSave} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl space-y-6 text-xs">
-        <div className="space-y-4">
-          <h3 className="font-bold text-white text-sm border-b border-slate-800 pb-2">اطلاعات کسب‌وکار و مالی</h3>
+      <form onSubmit={handleSave} className="space-y-6 text-xs">
+        {/* Section 1: Business & Legal Identification */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl space-y-5">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+            <Building2 className="h-5 w-5 text-cyan-400" />
+            <h3 className="font-bold text-white text-sm">مشخصات هویتی و حقوقی سازمان (فروشنده)</h3>
+          </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-slate-400 mb-1">نام سازمان / کسب‌وکار</label>
+              <label className="block text-slate-300 mb-1.5 font-medium">نام رسمی شرکت / فروشگاه / کسب‌وکار</label>
               <input
                 type="text"
                 value={form.businessName}
                 onChange={(e) => setForm({ ...form, businessName: e.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
+                placeholder="مثال: شرکت صنایع بازرگانی حکمت آکما"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white focus:border-cyan-500 focus:outline-none"
+                required
               />
+              <span className="text-[10px] text-slate-500 mt-1 block">عنوان اصلی در سربرگ فاکتور و اظهارنامه مالیاتی</span>
             </div>
+
             <div>
-              <label className="block text-slate-400 mb-1">کد اقتصادی / شماره مالیاتی</label>
+              <label className="block text-slate-300 mb-1.5 font-medium">شماره ثبت شرکت</label>
               <input
                 type="text"
-                value={form.taxNumber}
-                onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+                value={form.registrationNumber}
+                onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
+                placeholder="مثال: ۵۸۴۹۲۱"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-cyan-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">شناسه ملی (۱۱ رقمی)</label>
+              <input
+                type="text"
+                value={form.nationalId}
+                onChange={(e) => setForm({ ...form, nationalId: e.target.value })}
+                placeholder="مثال: ۱۰۳۸۰۴۵۹۶۱۰"
+                maxLength={14}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-cyan-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">شناسه ملی حقوقی جهت چاپ در فاکتور رسمی و اظهارنامه مالیاتی</span>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">کد اقتصادی / شماره مالیاتی (۱۲ رقمی)</label>
+              <input
+                type="text"
+                value={form.economicCode}
+                onChange={(e) => setForm({ ...form, economicCode: e.target.value, taxNumber: e.target.value })}
+                placeholder="مثال: ۴۱۱۵۸۹۳۲۴۷۸۵"
+                maxLength={16}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-cyan-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">کد اقتصادی رسمی سازمان امور مالیاتی</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Address & Contact Details */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl space-y-5">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+            <MapPin className="h-5 w-5 text-emerald-400" />
+            <h3 className="font-bold text-white text-sm">نشانی پستی، تلفن و اقامتگاه قانونی</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-slate-300 mb-1.5 font-medium">نشانی کامل پستی اقامتگاه قانونی</label>
+              <input
+                type="text"
+                value={form.companyAddress}
+                onChange={(e) => setForm({ ...form, companyAddress: e.target.value })}
+                placeholder="مثال: تهران، خیابان ولیعصر، نرسیده به میدان ونک، پلاک ۱۲، طبقه ۴"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white focus:border-emerald-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">این نشانی در کادر مشخصات فروشنده در چاپ فاکتورها نمایش داده می‌شود.</span>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">شماره تلفن ثابت و همراه</label>
+              <input
+                type="text"
+                value={form.companyPhone}
+                onChange={(e) => setForm({ ...form, companyPhone: e.target.value })}
+                placeholder="مثال: ۰۲۱-۸۸۹۹۰۰۱۱ یا ۰۹۱۲۳۴۵۶۷۸۹"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">کد پستی ۱۰ رقمی</label>
+              <input
+                type="text"
+                value={form.postalCode}
+                onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+                placeholder="مثال: ۱۹۹۱۸۳۴۵۶۷"
+                maxLength={12}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
         </div>
 
-        <div className="space-y-4 border-t border-slate-800 pt-4">
-          <h3 className="font-bold text-white text-sm border-b border-slate-800 pb-2 flex items-center gap-2">
-            <Key className="h-4 w-4 text-purple-400" />
-            پیکربندی هوش مصنوعی (Google Gemini)
-          </h3>
+        {/* Section 3: Tax & Financial Parameters */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl space-y-5">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+            <Percent className="h-5 w-5 text-amber-400" />
+            <h3 className="font-bold text-white text-sm">پارامترهای مالیاتی و محاسبه اظهارنامه</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">اداره کل و حوزه مالیاتی</label>
+              <input
+                type="text"
+                value={form.taxOffice}
+                onChange={(e) => setForm({ ...form, taxOffice: e.target.value })}
+                placeholder="مثال: اداره کل امور مالیاتی مرکز تهران - حوزه ۶۲"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white focus:border-amber-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">نرخ مالیات بر درآمد عملکرد (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={form.taxRateCorporate}
+                onChange={(e) => setForm({ ...form, taxRateCorporate: Number(e.target.value) })}
+                placeholder="۲۵"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-amber-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">نرخ قانونی ماده ۱۰۵ ق.م.م (معمولاً ۲۵٪ اشخاص حقوقی)</span>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-medium">نرخ مالیات و عوارض ارزش افزوده (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={form.vatRate}
+                onChange={(e) => setForm({ ...form, vatRate: Number(e.target.value) })}
+                placeholder="۱۰"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-amber-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">نرخ قانون مالیات بر ارزش افزوده (۱۰٪ مصوب)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: AI & Gemini Config */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl space-y-5">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+            <Key className="h-5 w-5 text-purple-400" />
+            <h3 className="font-bold text-white text-sm">پیکربندی هوش مصنوعی (Google Gemini)</h3>
+          </div>
 
           <div>
-            <label className="block text-slate-400 mb-1">Gemini API Key (ذخیره امن سمت سرور)</label>
+            <label className="block text-slate-300 mb-1.5 font-medium">Gemini API Key (ذخیره امن سمت سرور)</label>
             <input
               type="password"
               placeholder="AIza..."
               value={form.openaiApiKey}
               onChange={(e) => setForm({ ...form, openaiApiKey: e.target.value })}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono focus:border-purple-500 focus:outline-none"
             />
             <p className="mt-2 text-[11px] leading-5 text-slate-500">
-              مدل به‌صورت خودکار از مدل‌های مجاز همین API Key شناسایی و انتخاب می‌شود؛ نیازی به انتخاب دستی مدل نیست.
+              مدل هوش مصنوعی به‌صورت خودکار بر اساس کلید تنظیم شده پیکربندی می‌شود.
             </p>
           </div>
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-slate-800">
+        <div className="flex items-center justify-between pt-2">
+          <div className="text-xs text-slate-400">
+            تمامی تغییرات در لحظه در ماژول‌های چاپ فاکتور، گزارشات و اظهارنامه اعمال می‌گردد.
+          </div>
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-blue-600/30 hover:bg-blue-500"
+            className="flex items-center gap-2 rounded-xl bg-cyan-600 px-7 py-3 font-bold text-white shadow-lg shadow-cyan-600/30 hover:bg-cyan-500 transition cursor-pointer disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
-            {saving ? "در حال ذخیره..." : "ذخیره تغییرات تنظیمات"}
+            {saving ? "در حال ذخیره..." : "ذخیره تنظیمات سیستم"}
           </button>
         </div>
       </form>

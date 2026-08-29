@@ -13,7 +13,8 @@ import {
   productionBatches,
   inventoryLedger,
   commissionLedger,
-  accounts
+  accounts,
+  systemSettings
 } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -449,5 +450,132 @@ export async function getProjectComparisonReport(projectAId: string, projectBId:
   return {
     projectA: { info: projectA, kpis: reportA },
     projectB: { info: projectB, kpis: reportB },
+  };
+}
+
+/**
+ * 7. Official Tax Declaration Report (گزارش اظهارنامه مالیاتی رسمی)
+ */
+export async function getTaxDeclarationReport(filter: ReportFilter = {}) {
+  const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, "main_config")).limit(1);
+
+  const allInvoices = await db.select().from(invoices);
+  const allExpenses = await db.select().from(expenses);
+  const allCommissions = await db.select().from(commissionLedger);
+
+  const scopedInvoices = allInvoices.filter((inv) => {
+    if (inv.status === "reversed") return false;
+    if (filter.projectId && inv.projectId !== filter.projectId) return false;
+    if (filter.excludeProjectIds?.includes(inv.projectId || "")) return false;
+    if (filter.startDate && new Date(inv.invoiceDate) < filter.startDate) return false;
+    if (filter.endDate && new Date(inv.invoiceDate) > filter.endDate) return false;
+    return true;
+  });
+
+  const scopedExpenses = allExpenses.filter((exp) => {
+    if (filter.projectId && exp.projectId !== filter.projectId) return false;
+    if (filter.excludeProjectIds?.includes(exp.projectId || "")) return false;
+    if (filter.startDate && new Date(exp.expenseDate) < filter.startDate) return false;
+    if (filter.endDate && new Date(exp.expenseDate) > filter.endDate) return false;
+    return true;
+  });
+
+  const scopedCommissions = allCommissions.filter((c) => {
+    if (filter.projectId && c.projectId !== filter.projectId) return false;
+    if (filter.excludeProjectIds?.includes(c.projectId || "")) return false;
+    if (filter.startDate && new Date(c.createdAt) < filter.startDate) return false;
+    if (filter.endDate && new Date(c.createdAt) > filter.endDate) return false;
+    return true;
+  });
+
+  let grossSales = 0;
+  let totalDiscounts = 0;
+  let totalCogs = 0;
+  let vatCollected = 0;
+  let totalPaid = 0;
+  let totalReceivable = 0;
+
+  for (const inv of scopedInvoices) {
+    grossSales += Number(inv.subtotal) || 0;
+    totalDiscounts += (Number(inv.lineDiscountsTotal) || 0) + (Number(inv.invoiceDiscount) || 0);
+    totalCogs += Number(inv.cogsTotal) || 0;
+    vatCollected += Number(inv.taxTotal) || 0;
+    totalPaid += Number(inv.paidAmount) || 0;
+    totalReceivable += Number(inv.balanceDue) || 0;
+  }
+
+  const netSalesRevenue = grossSales - totalDiscounts;
+  const grossProfit = netSalesRevenue - totalCogs;
+
+  let totalExpenses = 0;
+  const expenseByCategory: { [key: string]: number } = {};
+  for (const exp of scopedExpenses) {
+    const amt = Number(exp.amount) || 0;
+    totalExpenses += amt;
+    const cat = exp.category || "سایر هزینه‌های اداری و عمومی";
+    expenseByCategory[cat] = (expenseByCategory[cat] || 0) + amt;
+  }
+
+  let totalCommissions = 0;
+  for (const c of scopedCommissions) {
+    totalCommissions += Number(c.commissionAmount) || 0;
+  }
+
+  const totalAllowableDeductions = totalExpenses + totalCommissions;
+  const taxableOperatingProfit = grossProfit - totalAllowableDeductions;
+
+  const corporateTaxRate = Number(settings?.taxRateCorporate) || 25;
+  const vatRate = Number(settings?.vatRate) || 10;
+
+  const corporateTaxAmount = taxableOperatingProfit > 0 ? Math.round((taxableOperatingProfit * corporateTaxRate) / 100) : 0;
+  const calculatedVat = Math.round((netSalesRevenue * vatRate) / 100);
+  const netRetainedProfit = taxableOperatingProfit - corporateTaxAmount;
+
+  return {
+    taxpayer: {
+      businessName: settings?.businessName || "شرکت مهندسی و بازرگانی حکمت اکما",
+      economicCode: settings?.economicCode || "-",
+      nationalId: settings?.nationalId || "-",
+      registrationNumber: settings?.registrationNumber || "-",
+      postalCode: settings?.postalCode || "-",
+      companyAddress: settings?.companyAddress || "-",
+      companyPhone: settings?.companyPhone || "-",
+      taxOffice: settings?.taxOffice || "اداره امور مالیاتی",
+      corporateTaxRate,
+      vatRate,
+    },
+    period: {
+      startDate: filter.startDate ? filter.startDate.toISOString() : null,
+      endDate: filter.endDate ? filter.endDate.toISOString() : null,
+    },
+    statement: {
+      invoiceCount: scopedInvoices.length,
+      expenseCount: scopedExpenses.length,
+      grossSales,
+      totalDiscounts,
+      netSalesRevenue,
+      totalCogs,
+      grossProfit,
+      totalExpenses,
+      totalCommissions,
+      totalAllowableDeductions,
+      taxableOperatingProfit,
+      corporateTaxAmount,
+      corporateTaxRate,
+      calculatedVat,
+      vatRate,
+      netRetainedProfit,
+      totalPaid,
+      totalReceivable,
+    },
+    expenseBreakdown: Object.entries(expenseByCategory).map(([category, amount]) => ({ category, amount })),
+    recentInvoices: scopedInvoices.slice(0, 50).map((inv) => ({
+      invoiceNumber: inv.invoiceNumber,
+      invoiceDate: inv.invoiceDate,
+      grandTotal: Number(inv.grandTotal),
+      cogsTotal: Number(inv.cogsTotal),
+      grossProfit: Number(inv.grossProfitTotal),
+      paymentStatus: inv.paymentStatus,
+    })),
   };
 }

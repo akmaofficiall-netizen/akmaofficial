@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { NeonBadge } from "@/components/ui/NeonBadge";
 import {
   TrendingUp,
@@ -13,7 +13,15 @@ import {
   ShoppingBag,
   Users,
   Calendar,
-  Package
+  Package,
+  FileText,
+  Download,
+  Printer,
+  Building,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet
 } from "lucide-react";
 import {
   BarChart,
@@ -24,15 +32,29 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts";
-import { toJalaliDate, formatMoney, formatNumber } from "@/lib/dateUtils";
+import { toJalaliDate, formatMoney, formatMoneyDual, formatNumber } from "@/lib/dateUtils";
+import { numberToPersianWords } from "@/lib/numberToWords";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
-  const [activeTab, setActiveTab] = useState<"financial" | "sales" | "inflation" | "comparison">("financial");
+  const [activeTab, setActiveTab] = useState<"financial" | "tax_declaration" | "sales" | "inflation" | "comparison">("financial");
   const [financialData, setFinancialData] = useState<any>(null);
   const [salesData, setSalesData] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [comparisonData, setComparisonData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Tax Declaration state
+  const [taxData, setTaxData] = useState<any>(null);
+  const [taxLoading, setTaxLoading] = useState(false);
+  const [taxPreset, setTaxPreset] = useState("year1403");
+  const [taxStartDate, setTaxStartDate] = useState("2024-03-20");
+  const [taxEndDate, setTaxEndDate] = useState("2025-03-20");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const taxDocRef = useRef<HTMLDivElement>(null);
+  const [docTrackingNumber] = useState(() => `TX-${Math.floor(10000000 + Math.random() * 90000000)}`);
+  const [docCreationDate] = useState(() => toJalaliDate(new Date()));
 
   // Inflation simulator state
   const [simulatedChanges, setSimulatedChanges] = useState<{ [key: string]: number }>({});
@@ -71,9 +93,115 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
     }
   };
 
+  const fetchTaxDeclaration = async (start = taxStartDate, end = taxEndDate) => {
+    setTaxLoading(true);
+    try {
+      const projParam = selectedProjectId ? `&projectId=${selectedProjectId}` : "";
+      const query = `/api/reports?type=tax_declaration&startDate=${start}&endDate=${end}${projParam}`;
+      const res = await fetch(query).then((r) => r.json());
+      if (res.success) {
+        setTaxData(res.data);
+      }
+    } catch (err) {
+      console.error("Error fetching tax declaration:", err);
+    } finally {
+      setTaxLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchTaxDeclaration();
   }, [selectedProjectId]);
+
+  const handlePresetChange = (preset: string) => {
+    setTaxPreset(preset);
+    let s = "2024-03-20",
+      e = "2025-03-20";
+    if (preset === "year1403") {
+      s = "2024-03-20";
+      e = "2025-03-20";
+    } else if (preset === "spring1403") {
+      s = "2024-03-20";
+      e = "2024-06-21";
+    } else if (preset === "summer1403") {
+      s = "2024-06-21";
+      e = "2024-09-21";
+    } else if (preset === "autumn1403") {
+      s = "2024-09-22";
+      e = "2024-12-21";
+    } else if (preset === "winter1403") {
+      s = "2024-12-22";
+      e = "2025-03-20";
+    } else if (preset === "year1404") {
+      s = "2025-03-21";
+      e = "2026-03-20";
+    }
+    setTaxStartDate(s);
+    setTaxEndDate(e);
+    fetchTaxDeclaration(s, e);
+  };
+
+  const handleDownloadTaxPdf = async () => {
+    if (!taxDocRef.current) return;
+    setGeneratingPdf(true);
+    try {
+      const element = taxDocRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      const filename = `Tax_Declaration_${taxStartDate}_to_${taxEndDate}.pdf`;
+      pdf.save(filename);
+    } catch (err: any) {
+      alert("خطا در تولید فایل PDF: " + err.message);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handlePrintTaxDoc = () => {
+    if (!taxDocRef.current) return;
+    const printContent = taxDocRef.current.innerHTML;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="fa">
+        <head>
+          <meta charset="utf-8" />
+          <title>اظهارنامه مالیاتی رسمی</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+            @media print {
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              @page { size: A4 portrait; margin: 8mm; }
+            }
+            body { font-family: system-ui, -apple-system, sans-serif; background: #fff; color: #000; }
+          </style>
+        </head>
+        <body class="p-4 bg-white text-black">
+          ${printContent}
+          <script>
+            setTimeout(() => { window.print(); window.close(); }, 500);
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   const handleRunInflationSim = async () => {
     try {
@@ -123,25 +251,34 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <BarChart2 className="h-6 w-6 text-purple-400" />
-            مرکز گزارشات مدیریتی، سود و زیان (P&L) و تحلیل داده‌ها
+            مرکز گزارشات مدیریتی، سود و زیان (P&L) و اظهارنامه مالیاتی
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            داده‌های عملیاتی یکپارچه از فروش ویزیتوری، انبارداری و هزینه‌های جاری
+            داده‌های عملیاتی یکپارچه از فروش ویزیتوری، انبارداری، حساب‌ها و اظهارنامه مالیاتی رسمی
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 rounded-2xl bg-slate-900 p-1.5 border border-slate-800 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl bg-slate-900 p-1.5 border border-slate-800 text-xs font-semibold">
           <button
             onClick={() => setActiveTab("financial")}
-            className={`rounded-xl px-4 py-2 transition ${
+            className={`rounded-xl px-3.5 py-2 transition ${
               activeTab === "financial" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
             سود و زیان (P&L)
           </button>
           <button
+            onClick={() => setActiveTab("tax_declaration")}
+            className={`rounded-xl px-3.5 py-2 transition flex items-center gap-1.5 ${
+              activeTab === "tax_declaration" ? "bg-amber-600 text-white shadow-lg shadow-amber-600/30" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            اظهارنامه مالیاتی (PDF)
+          </button>
+          <button
             onClick={() => setActiveTab("sales")}
-            className={`rounded-xl px-4 py-2 transition ${
+            className={`rounded-xl px-3.5 py-2 transition ${
               activeTab === "sales" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -149,7 +286,7 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
           </button>
           <button
             onClick={() => setActiveTab("inflation")}
-            className={`rounded-xl px-4 py-2 transition ${
+            className={`rounded-xl px-3.5 py-2 transition ${
               activeTab === "inflation" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -157,7 +294,7 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
           </button>
           <button
             onClick={() => setActiveTab("comparison")}
-            className={`rounded-xl px-4 py-2 transition ${
+            className={`rounded-xl px-3.5 py-2 transition ${
               activeTab === "comparison" ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-slate-400 hover:text-white"
             }`}
           >
@@ -165,6 +302,327 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
           </button>
         </div>
       </div>
+
+      {/* Tab: Tax Declaration (اظهارنامه مالیاتی رسمی) */}
+      {activeTab === "tax_declaration" && (
+        <div className="space-y-6">
+          {/* Controls & Date Filter Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <FileSpreadsheet className="h-5 w-5 text-amber-400" />
+                تنظیم دوره و بازه زمانی شمسی برای صدور اظهارنامه مالیاتی
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintTaxDoc}
+                  disabled={taxLoading || !taxData}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3.5 py-2 text-xs font-bold text-slate-200 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Printer className="h-4 w-4 text-slate-400" />
+                  چاپ اظهارنامه
+                </button>
+                <button
+                  onClick={handleDownloadTaxPdf}
+                  disabled={taxLoading || generatingPdf || !taxData}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-amber-600/30 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  {generatingPdf ? "در حال تولید PDF..." : "دانلود PDF اظهارنامه مالیاتی"}
+                </button>
+              </div>
+            </div>
+
+            {/* Presets & Custom Dates */}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-400 ml-1">دوره‌های پیش‌فرض:</span>
+                {[
+                  { id: "year1403", label: "کل سال مالی ۱۴۰۳" },
+                  { id: "spring1403", label: "فصل بهار ۱۴۰۳" },
+                  { id: "summer1403", label: "فصل تابستان ۱۴۰۳" },
+                  { id: "autumn1403", label: "فصل پاییز ۱۴۰۳" },
+                  { id: "winter1403", label: "فصل زمستان ۱۴۰۳" },
+                  { id: "year1404", label: "سال مالی ۱۴۰۴" },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => handlePresetChange(p.id)}
+                    className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                      taxPreset === p.id
+                        ? "bg-amber-600 text-white font-bold shadow-md shadow-amber-600/30"
+                        : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-2">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">از تاریخ (آغاز دوره مالیاتی):</label>
+                  <input
+                    type="date"
+                    value={taxStartDate}
+                    onChange={(e) => {
+                      setTaxPreset("custom");
+                      setTaxStartDate(e.target.value);
+                    }}
+                    className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">معادل شمسی: {toJalaliDate(taxStartDate)}</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">تا تاریخ (پایان دوره مالیاتی):</label>
+                  <input
+                    type="date"
+                    value={taxEndDate}
+                    onChange={(e) => {
+                      setTaxPreset("custom");
+                      setTaxEndDate(e.target.value);
+                    }}
+                    className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">معادل شمسی: {toJalaliDate(taxEndDate)}</span>
+                </div>
+
+                <div>
+                  <button
+                    onClick={() => fetchTaxDeclaration(taxStartDate, taxEndDate)}
+                    disabled={taxLoading}
+                    className="w-full rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${taxLoading ? "animate-spin text-amber-400" : ""}`} />
+                    محاسبه و دریافت اظهارنامه
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tax Declaration Document Preview Container */}
+          {taxLoading ? (
+            <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/40">
+              <RefreshCw className="h-8 w-8 animate-spin text-amber-500" />
+            </div>
+          ) : !taxData ? (
+            <div className="p-8 text-center text-xs text-slate-500 border border-slate-800 rounded-2xl">
+              اطلاعاتی برای نمایش یافت نشد.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 overflow-x-auto">
+              {/* PRINTABLE TAX DECLARATION PAPER (A4 Layout) */}
+              <div
+                ref={taxDocRef}
+                className="mx-auto w-[210mm] min-h-[297mm] bg-white text-slate-900 p-8 shadow-2xl rounded-sm text-right font-sans border border-slate-300"
+                style={{ direction: "rtl", color: "#0f172a" }}
+              >
+                {/* Official Government Header */}
+                <div className="border-b-2 border-slate-900 pb-4 mb-5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-right space-y-1 text-[11px] text-slate-700">
+                      <div>شماره پرونده / پیگیری: <span className="font-mono font-bold text-slate-900">{docTrackingNumber}</span></div>
+                      <div>تاریخ تنظیم: <span className="font-bold text-slate-900">{docCreationDate}</span></div>
+                      <div>دوره مالیاتی: <span className="font-bold text-slate-900">{toJalaliDate(taxStartDate)} الی {toJalaliDate(taxEndDate)}</span></div>
+                    </div>
+
+                    <div className="text-center space-y-1">
+                      <div className="font-serif text-xs font-bold text-slate-800">جمهوری اسلامی ایران</div>
+                      <div className="text-sm font-black tracking-tight text-slate-950">سازمان امور مالیاتی کشور</div>
+                      <div className="text-xs font-extrabold bg-slate-100 border border-slate-300 px-3 py-1 rounded">
+                        برگ اظهارنامه مالیات بر عملکرد و ارزش افزوده
+                      </div>
+                    </div>
+
+                    <div className="text-left space-y-1 text-[11px] text-slate-700">
+                      <div>اداره کل امور مالیاتی:</div>
+                      <div className="font-bold text-slate-900">{taxData.taxpayer?.taxOffice || "اداره امور مالیاتی استان"}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">INTA-FORM-110/4</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 1: Taxpayer Profile */}
+                <div className="mb-5 border border-slate-800 rounded">
+                  <div className="bg-slate-200 px-3 py-1 font-bold text-xs text-slate-900 border-b border-slate-800">
+                    بخش اول: مشخصات هویتی، قانونی و ثبتی مؤدی مالیاتی
+                  </div>
+                  <div className="p-3 grid grid-cols-3 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <span className="text-slate-600">نام شرکت / مؤدی: </span>
+                      <b className="text-slate-900">{taxData.taxpayer?.businessName}</b>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">شناسه ملی: </span>
+                      <b className="font-mono text-slate-900">{taxData.taxpayer?.nationalId || "-"}</b>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">کد اقتصادی: </span>
+                      <b className="font-mono text-slate-900">{taxData.taxpayer?.economicCode || "-"}</b>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-600">شماره ثبت: </span>
+                      <b className="font-mono text-slate-900">{taxData.taxpayer?.registrationNumber || "-"}</b>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">کد پستی ۱۰ رقمی: </span>
+                      <b className="font-mono text-slate-900">{taxData.taxpayer?.postalCode || "-"}</b>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">تلفن تماس: </span>
+                      <b className="font-mono text-slate-900">{taxData.taxpayer?.companyPhone || "-"}</b>
+                    </div>
+
+                    <div className="col-span-3 pt-1 border-t border-slate-200">
+                      <span className="text-slate-600">نشانی اقامتگاه قانونی / دفتر مرکزی: </span>
+                      <b className="text-slate-900">{taxData.taxpayer?.companyAddress || "-"}</b>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Sales & Revenue Table */}
+                <div className="mb-5 border border-slate-800 rounded">
+                  <div className="bg-slate-200 px-3 py-1 font-bold text-xs text-slate-900 border-b border-slate-800 flex justify-between">
+                    <span>بخش دوم: جدول محاسبه فروش ناخالص، تخفیفات و درآمد خالص ابرازی</span>
+                    <span className="text-[11px] font-normal">مبالغ به تومان</span>
+                  </div>
+                  <table className="w-full text-xs text-right border-collapse">
+                    <tbody>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2 w-12 font-bold text-slate-700 bg-slate-50 border-l border-slate-200">۱</td>
+                        <td className="p-2 text-slate-800">مجموع فروش ناخالص کالا و خدمات ({taxData.statement?.invoiceCount} فقره فاکتور)</td>
+                        <td className="p-2 text-left font-mono font-bold text-slate-900">{formatMoney(taxData.statement?.grossSales || 0)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200 bg-slate-50/50">
+                        <td className="p-2 font-bold text-slate-700 bg-slate-50 border-l border-slate-200">۲</td>
+                        <td className="p-2 text-slate-800">تخفیفات، برگشت از فروش و تعدیلات نرخ</td>
+                        <td className="p-2 text-left font-mono text-slate-700">{formatMoney(taxData.statement?.totalDiscounts || 0)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-300 bg-slate-100 font-bold">
+                        <td className="p-2 text-slate-900 bg-slate-200 border-l border-slate-300">۳</td>
+                        <td className="p-2 text-slate-950">فروش خالص و درآمدهای عملیاتی دوره (ردیف ۱ منهای ردیف ۲)</td>
+                        <td className="p-2 text-left font-mono text-slate-950">{formatMoney(taxData.statement?.netSalesRevenue || 0)}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2 font-bold text-slate-700 bg-slate-50 border-l border-slate-200">۴</td>
+                        <td className="p-2 text-slate-800">بهای تمام شده کالای فروش رفته (COGS - مواد، تدارکات و تولید)</td>
+                        <td className="p-2 text-left font-mono text-slate-800">{formatMoney(taxData.statement?.totalCogs || 0)}</td>
+                      </tr>
+                      <tr className="bg-slate-200/80 font-black">
+                        <td className="p-2 text-slate-950 bg-slate-300 border-l border-slate-300">۵</td>
+                        <td className="p-2 text-slate-950">سود (زیان) ناخالص فعالیت تجاری (ردیف ۳ منهای ردیف ۴)</td>
+                        <td className="p-2 text-left font-mono text-slate-950">{formatMoney(taxData.statement?.grossProfit || 0)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Section 3: Operating Expenses Breakdown */}
+                <div className="mb-5 border border-slate-800 rounded">
+                  <div className="bg-slate-200 px-3 py-1 font-bold text-xs text-slate-900 border-b border-slate-800 flex justify-between">
+                    <span>بخش سوم: جدول هزینه‌های عملیاتی و اداری قابل قبول مالیاتی (ماده ۱۴۷ و ۱۴۸ ق.م.م)</span>
+                    <span className="text-[11px] font-normal">مبالغ به تومان</span>
+                  </div>
+                  <table className="w-full text-xs text-right border-collapse">
+                    <tbody className="divide-y divide-slate-200">
+                      {taxData.expenseBreakdown && taxData.expenseBreakdown.length > 0 ? (
+                        taxData.expenseBreakdown.map((item: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="p-2 w-12 font-mono text-slate-600 bg-slate-50 border-l border-slate-200">{idx + 6}</td>
+                            <td className="p-2 text-slate-800">هزینه‌های: {item.category}</td>
+                            <td className="p-2 text-left font-mono font-medium text-slate-900">{formatMoney(item.amount)}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td className="p-2 w-12 font-mono text-slate-600 bg-slate-50 border-l border-slate-200">۶</td>
+                          <td className="p-2 text-slate-800">هزینه‌های اداری، عمومی و لجستیک</td>
+                          <td className="p-2 text-left font-mono font-medium text-slate-900">{formatMoney(taxData.statement?.totalExpenses || 0)}</td>
+                        </tr>
+                      )}
+                      <tr className="bg-slate-50">
+                        <td className="p-2 font-mono text-slate-600 bg-slate-100 border-l border-slate-200">پ</td>
+                        <td className="p-2 text-slate-800">حقوق، دستمزد، بازاریابی و پورسانت‌های پرداختی به عوامل فروش</td>
+                        <td className="p-2 text-left font-mono font-medium text-slate-900">{formatMoney(taxData.statement?.totalCommissions || 0)}</td>
+                      </tr>
+                      <tr className="bg-slate-100 font-bold border-t-2 border-slate-300">
+                        <td className="p-2 text-slate-900 bg-slate-200 border-l border-slate-300">جمع</td>
+                        <td className="p-2 text-slate-950">جمع کل هزینه‌های عملیاتی قابل قبول دوره</td>
+                        <td className="p-2 text-left font-mono text-slate-950">{formatMoney(taxData.statement?.totalAllowableDeductions || 0)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Section 4: Tax Assessment & Net Profit */}
+                <div className="mb-5 border-2 border-slate-900 rounded overflow-hidden">
+                  <div className="bg-slate-900 text-white px-3 py-1.5 font-bold text-xs flex justify-between">
+                    <span>بخش چهارم: محاسبه سود ویژه، مالیات بر عملکرد و مالیات بر ارزش افزوده (VAT)</span>
+                    <span className="text-[11px] font-normal text-slate-300">محاسبات قطعی تشخیصی/ابرازی</span>
+                  </div>
+                  <table className="w-full text-xs text-right border-collapse">
+                    <tbody>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2 text-slate-800 font-medium">سود (زیان) ویژه قبل از کسر مالیات (سود ناخالص منهای هزینه‌های عملیاتی)</td>
+                        <td className="p-2 text-left font-mono font-bold text-slate-950 text-sm">
+                          {formatMoney(taxData.statement?.taxableOperatingProfit || 0)}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <td className="p-2 text-slate-800">
+                          مالیات بر درآمد عملکرد دوره (نرخ مصوب ماده ۱۰۵ ق.م.م: <b className="font-mono">{taxData.statement?.corporateTaxRate}%</b>)
+                        </td>
+                        <td className="p-2 text-left font-mono font-bold text-slate-900">
+                          {formatMoney(taxData.statement?.corporateTaxAmount || 0)}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2 text-slate-800">
+                          مالیات و عوارض بر ارزش افزوده ابرازی فروش (VAT با نرخ <b className="font-mono">{taxData.statement?.vatRate}%</b>)
+                        </td>
+                        <td className="p-2 text-left font-mono font-bold text-slate-900">
+                          {formatMoney(taxData.statement?.calculatedVat || 0)}
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-100 font-extrabold border-t-2 border-slate-400">
+                        <td className="p-2.5 text-slate-950 text-xs">سود خالص ویژه دوره مالیاتی پس از کسر تعهدات مالیاتی</td>
+                        <td className="p-2.5 text-left font-mono text-slate-950 text-sm">
+                          {formatMoney(taxData.statement?.netRetainedProfit || 0)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="bg-slate-50 p-2.5 text-[11px] border-t border-slate-200 text-slate-700">
+                    مبلغ مالیات عملکرد ابرازی به حروف:{" "}
+                    <b className="text-slate-900 font-bold">{numberToPersianWords(taxData.statement?.corporateTaxAmount || 0, "تومان")}</b>
+                  </div>
+                </div>
+
+                {/* Section 5: Signature & Official Seal */}
+                <div className="border border-slate-800 rounded p-4 text-xs space-y-4">
+                  <p className="text-justify text-[11px] text-slate-700 leading-relaxed">
+                    اینجانب / صاحبان امضای مجاز شرکت با آگاهی کامل از مقررات و احکام قانونی مواد قانونی مالیات‌های مستقیم و قانون مالیات بر ارزش افزوده، صحت و اصالت تمامی ارقام، فاکتورها، بهای تمام شده و اسناد مندرج در این اظهارنامه را مورد تأیید و تصدیق قطعی قرار می‌دهیم.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-8 pt-4">
+                    <div className="text-center space-y-12">
+                      <div className="font-bold text-slate-900">مهر و امضای مدیر مالی / حسابدار رسمی</div>
+                      <div className="text-[10px] text-slate-400">امضاء و اثر انگشت</div>
+                    </div>
+                    <div className="text-center space-y-12">
+                      <div className="font-bold text-slate-900">مهر رسمی شرکت و امضای مدیرعامل</div>
+                      <div className="text-[10px] text-slate-400">محل مهر و امضای مجاز تعهدآور</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tab 1: Financial P&L Waterfall */}
       {activeTab === "financial" && (
@@ -441,3 +899,4 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
     </div>
   );
 };
+

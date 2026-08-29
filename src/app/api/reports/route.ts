@@ -5,7 +5,8 @@ import {
   getFinancialProfitReport,
   getCashFlowReport,
   getInventoryAndRawMaterialReport,
-  getProjectComparisonReport
+  getProjectComparisonReport,
+  getTaxDeclarationReport
 } from "@/services/reporting";
 import { simulateInflationImpact } from "@/services/pricing";
 
@@ -39,6 +40,11 @@ export async function GET(req: Request) {
 
     if (type === "financial") {
       const data = await getFinancialProfitReport(filter);
+      return NextResponse.json({ success: true, data });
+    }
+
+    if (type === "tax_declaration") {
+      const data = await getTaxDeclarationReport(filter);
       return NextResponse.json({ success: true, data });
     }
 
