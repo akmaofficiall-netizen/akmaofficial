@@ -125,6 +125,20 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
 
   useEffect(() => {
     fetchData();
+
+    const handleSettingsUpdate = () => {
+      fetch("/api/settings")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && data.settings) {
+            setSystemSettings(data.settings);
+          }
+        })
+        .catch((err) => console.error("Error refreshing settings in InvoicesView:", err));
+    };
+
+    window.addEventListener("akma:settings-updated", handleSettingsUpdate);
+    return () => window.removeEventListener("akma:settings-updated", handleSettingsUpdate);
   }, [selectedProjectId]);
 
   const loadProductsForProject = async (projId: string) => {
@@ -1368,11 +1382,19 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                     <span className="font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings?.businessName || "شرکت حکمت آکما"}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500" style={{ color: "#64748b" }}>کد اقتصادی: </span>
-                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings?.economicCode || systemSettings?.taxNumber || "—"}</span>
-                    {" | "}
-                    <span className="text-slate-500" style={{ color: "#64748b" }}>شناسه ملی: </span>
-                    <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings?.nationalId || "—"}</span>
+                    {systemSettings?.economicCode && (
+                      <>
+                        <span className="text-slate-500" style={{ color: "#64748b" }}>کد اقتصادی: </span>
+                        <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings.economicCode}</span>
+                        {systemSettings?.nationalId ? " | " : ""}
+                      </>
+                    )}
+                    {systemSettings?.nationalId && (
+                      <>
+                        <span className="text-slate-500" style={{ color: "#64748b" }}>شناسه ملی: </span>
+                        <span className="font-mono font-bold text-slate-900" style={{ color: "#0f172a" }}>{systemSettings.nationalId}</span>
+                      </>
+                    )}
                   </div>
                   {(systemSettings?.registrationNumber || systemSettings?.postalCode) && (
                     <div>

@@ -54,8 +54,8 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
   const balanceNum = Number(invoice.balanceDue) || 0;
 
   const sellerName = sellerInfo?.businessName || "سازمان و صنایع بازرگانی حکمت آکما";
-  const economicCode = sellerInfo?.economicCode || sellerInfo?.taxNumber || "—";
-  const nationalId = sellerInfo?.nationalId || "—";
+  const economicCode = sellerInfo?.economicCode || "";
+  const nationalId = sellerInfo?.nationalId || "";
   const regNumber = sellerInfo?.registrationNumber || "";
   const postalCode = sellerInfo?.postalCode || "";
   const address = sellerInfo?.companyAddress || "";
@@ -277,7 +277,11 @@ export function generateInvoiceHtml(data: PrintableInvoiceData): string {
       <div class="info-card">
         <div class="card-title">مشخصات فروشنده</div>
         <div><span style="color: #475569;">نام فروشنده: </span><strong style="color: #0f172a;">${sellerName}</strong></div>
-        <div><span style="color: #475569;">کد اقتصادی: </span><strong style="color: #0f172a;">${economicCode}</strong> | <span style="color: #475569;">شناسه ملی: </span><strong style="color: #0f172a;">${nationalId}</strong></div>
+        <div>
+          ${economicCode ? `<span style="color: #475569;">کد اقتصادی: </span><strong style="color: #0f172a;">${economicCode}</strong>` : ""}
+          ${economicCode && nationalId ? ` | ` : ""}
+          ${nationalId ? `<span style="color: #475569;">شناسه ملی: </span><strong style="color: #0f172a;">${nationalId}</strong>` : ""}
+        </div>
         ${(regNumber || postalCode) ? `<div>${regNumber ? `<span style="color: #475569;">شماره ثبت: </span><strong style="color: #0f172a;">${regNumber}</strong> | ` : ""}${postalCode ? `<span style="color: #475569;">کد پستی: </span><strong style="color: #0f172a;">${postalCode}</strong>` : ""}</div>` : ""}
         <div><span style="color: #475569;">نشانی و تلفن: </span><span style="color: #0f172a;">${contactLine}</span></div>
       </div>

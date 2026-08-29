@@ -21,7 +21,8 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Eye
 } from "lucide-react";
 import {
   BarChart,
@@ -627,6 +628,73 @@ export const ReportsView: React.FC<{ selectedProjectId: string | null }> = ({ se
       {/* Tab 1: Financial P&L Waterfall */}
       {activeTab === "financial" && (
         <div className="space-y-6">
+          {/* Quick Tax Declaration Action Card */}
+          <div className="rounded-3xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-slate-900/90 to-slate-900/90 p-6 shadow-2xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
+                    <FileSpreadsheet className="h-4 w-4" />
+                  </span>
+                  <h3 className="text-base font-bold text-white">مرکز صدور و دانلود اظهارنامه مالیاتی رسمی</h3>
+                  <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30">
+                    قانون مالیات‌های مستقیم و VAT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  تولید و دانلود گزارش رسمی استاندارد مالیاتی شامل درآمد فروش، بهای تمام‌شده، هزینه‌های عملیاتی، مالیات بر درآمد عملکرد (۲۵٪) و ارزش افزوده (۱۰٪).
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={handleDownloadTaxPdf}
+                  disabled={taxLoading || generatingPdf || !taxData}
+                  className="flex items-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-500 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-600/30 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" />
+                  {generatingPdf ? "در حال تهیه PDF..." : "دانلود فوری PDF اظهارنامه مالیاتی"}
+                </button>
+                <button
+                  onClick={handlePrintTaxDoc}
+                  disabled={taxLoading || !taxData}
+                  className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3.5 py-2.5 text-xs font-bold text-slate-200 transition cursor-pointer disabled:opacity-50"
+                >
+                  <Printer className="h-4 w-4 text-slate-400" />
+                  چاپ اظهارنامه
+                </button>
+                <button
+                  onClick={() => setActiveTab("tax_declaration")}
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-950/30 hover:bg-amber-900/40 px-3.5 py-2.5 text-xs font-bold text-amber-300 transition cursor-pointer"
+                >
+                  <Eye className="h-4 w-4" />
+                  مشاهده برگه کامل و تنظیم تاریخ
+                </button>
+              </div>
+            </div>
+
+            {taxData?.statement && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80 text-xs">
+                <div className="rounded-xl bg-slate-950/60 p-3 border border-slate-800">
+                  <span className="text-slate-400 block text-[11px]">فروش مشمول دوره:</span>
+                  <b className="text-white font-mono text-sm mt-0.5 block">{formatMoney(taxData.statement.netOperatingRevenue || 0)}</b>
+                </div>
+                <div className="rounded-xl bg-slate-950/60 p-3 border border-slate-800">
+                  <span className="text-slate-400 block text-[11px]">هزینه‌های قابل قبول مالیاتی:</span>
+                  <b className="text-white font-mono text-sm mt-0.5 block">{formatMoney(taxData.statement.totalAllowableDeductions || 0)}</b>
+                </div>
+                <div className="rounded-xl bg-amber-950/30 p-3 border border-amber-800/40">
+                  <span className="text-amber-300 block text-[11px]">مالیات بر عملکرد (۲۵٪):</span>
+                  <b className="text-amber-400 font-mono text-sm mt-0.5 block">{formatMoney(taxData.statement.corporateTaxAmount || 0)}</b>
+                </div>
+                <div className="rounded-xl bg-amber-950/30 p-3 border border-amber-800/40">
+                  <span className="text-amber-300 block text-[11px]">مالیات بر ارزش افزوده (VAT ۱۰٪):</span>
+                  <b className="text-amber-400 font-mono text-sm mt-0.5 block">{formatMoney(taxData.statement.calculatedVat || 0)}</b>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl space-y-1">
               <span className="text-xs text-slate-400">درآمد ناخالص فروش:</span>

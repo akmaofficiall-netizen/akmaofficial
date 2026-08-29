@@ -130,6 +130,10 @@ export const ProjectExtrasView: React.FC<{ project: any; tab: string; employees:
       }
 
       setForm({});
+      if (tab === "expenses") {
+        window.dispatchEvent(new CustomEvent("akma:expenses-updated"));
+        window.dispatchEvent(new CustomEvent("akma:accounts-updated"));
+      }
       load();
     } catch (err: any) {
       alert(err.message || "خطا در برقراری ارتباط");
@@ -145,6 +149,8 @@ export const ProjectExtrasView: React.FC<{ project: any; tab: string; employees:
         method: "DELETE",
       }).then((r) => r.json());
       if (res.success) {
+        window.dispatchEvent(new CustomEvent("akma:expenses-updated"));
+        window.dispatchEvent(new CustomEvent("akma:accounts-updated"));
         load();
       } else {
         alert(res.error || "خطا در حذف هزینه");

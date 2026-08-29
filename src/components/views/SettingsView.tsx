@@ -76,6 +76,7 @@ export const SettingsView: React.FC = () => {
 
       if (res.success) {
         setSavedSuccess(true);
+        window.dispatchEvent(new CustomEvent("akma:settings-updated"));
         setTimeout(() => setSavedSuccess(false), 4000);
       } else {
         alert(res.error || "خطا در ذخیره تنظیمات");

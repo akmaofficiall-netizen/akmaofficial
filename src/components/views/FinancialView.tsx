@@ -112,6 +112,14 @@ export const FinancialView: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+
+    const handleSync = () => fetchData();
+    window.addEventListener("akma:expenses-updated", handleSync);
+    window.addEventListener("akma:accounts-updated", handleSync);
+    return () => {
+      window.removeEventListener("akma:expenses-updated", handleSync);
+      window.removeEventListener("akma:accounts-updated", handleSync);
+    };
   }, []);
 
   // Open Account Modal for Create
