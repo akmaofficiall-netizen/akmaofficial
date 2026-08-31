@@ -135,26 +135,50 @@ export const ProjectManagementView: React.FC = () => {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.code.trim()) {
-      alert("نام و کد پروژه الزامی است.");
+    if (!form.name.trim()) {
+      alert("لطفاً نام پروژه را وارد نمایید.");
       return;
     }
     const url = editingProject ? `/api/projects/${editingProject.id}` : "/api/projects";
     const method = editingProject ? "PUT" : "POST";
-    const r = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    }).then((x) => x.json());
 
-    if (!r.success) return alert(r.error);
-    setShow(false);
-    setEditingProject(null);
-    await load();
-    if (editingProject) setSelected({ ...editingProject, ...form });
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          name: form.name.trim(),
+          code: form.code.trim() || `PRJ-${Date.now().toString().slice(-5)}`,
+          managerEmployeeId: form.managerEmployeeId && form.managerEmployeeId.trim() !== "" ? form.managerEmployeeId : null,
+        }),
+      });
 
-    // Broadcast project update so top-bar selector and other views sync immediately!
-    window.dispatchEvent(new CustomEvent("akma:projects-updated"));
+      let r: any;
+      try {
+        r = await response.json();
+      } catch {
+        throw new Error("پاسخ نامعتبر از سرور دریافت شد.");
+      }
+
+      if (!r.success) {
+        alert(r.error || "خطا در ذخیره اطلاعات پروژه");
+        return;
+      }
+
+      setShow(false);
+      setEditingProject(null);
+      await load();
+      if (editingProject && selected) {
+        setSelected({ ...selected, ...form });
+      }
+
+      // Broadcast project update so top-bar selector and other views sync immediately!
+      window.dispatchEvent(new CustomEvent("akma:projects-updated"));
+      alert(editingProject ? "اطلاعات پروژه با موفقیت ویرایش شد." : (r.message || `پروژه «${form.name}» با موفقیت ایجاد شد.`));
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور هنگام ذخیره پروژه");
+    }
   };
 
   const archive = async () => {

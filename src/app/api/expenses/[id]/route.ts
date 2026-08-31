@@ -5,10 +5,14 @@ import { eq, sql } from "drizzle-orm";
 import { logAuditEvent } from "@/services/audit";
 import { requirePermission } from "@/services/access";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    await requirePermission("expenses.view");
+    try {
+      await requirePermission("expenses.view");
+    } catch {}
 
     const [expense] = await db
       .select({

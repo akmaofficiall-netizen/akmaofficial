@@ -1029,7 +1029,16 @@ export async function migrateDatabase() {
     ALTER TABLE customers ALTER COLUMN latitude DROP DEFAULT;
     ALTER TABLE customers ALTER COLUMN longitude DROP DEFAULT;
 
+    -- Default Accounts Seeding
+    INSERT INTO accounts (code, name, type, bank_name, account_number, balance, is_default)
+    VALUES
+      ('ACC-1001', 'صندوق نقدینگی مرکزی', 'cash', NULL, NULL, 50000000, true),
+      ('ACC-1002', 'حساب جاری بانک ملت', 'bank', 'بانک ملت', '6104337890123456', 150000000, false),
+      ('ACC-1003', 'دستگاه کارتخوان (POS)', 'pos', 'بانک ملی', '6037991823456789', 25000000, false)
+    ON CONFLICT (code) DO NOTHING;
+
   `);
 
   console.log("Migration completed successfully!");
 }
+

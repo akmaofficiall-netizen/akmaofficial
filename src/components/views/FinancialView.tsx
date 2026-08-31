@@ -229,11 +229,12 @@ export const FinancialView: React.FC = () => {
   // Open Add Expense Modal
   const openAddExpense = () => {
     setEditingExpense(null);
+    const defaultAcc = accounts.find((a) => a.isDefault) || accounts[0];
     setExpenseForm({
       title: "",
       category: "rent",
       amount: 0,
-      accountId: accounts[0]?.id || "",
+      accountId: defaultAcc?.id || "",
       projectId: "",
       expenseDate: new Date().toISOString().slice(0, 10),
       notes: "",
@@ -244,11 +245,12 @@ export const FinancialView: React.FC = () => {
   // Open Edit Expense Modal
   const openEditExpense = (exp: any) => {
     setEditingExpense(exp);
+    const defaultAcc = accounts.find((a) => a.isDefault) || accounts[0];
     setExpenseForm({
       title: exp.title || "",
       category: exp.category || "rent",
       amount: Number(exp.amount) || 0,
-      accountId: exp.accountId || accounts[0]?.id || "",
+      accountId: exp.accountId || defaultAcc?.id || "",
       projectId: exp.projectId || "",
       expenseDate: exp.expenseDate ? String(exp.expenseDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
       notes: exp.description || exp.notes || "",
@@ -259,9 +261,14 @@ export const FinancialView: React.FC = () => {
   // Save Expense (Create or Update)
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!expenseForm.title.trim() || expenseForm.amount <= 0 || !expenseForm.accountId) {
-      alert("عنوان هزینه، مبلغ و حساب پرداختی الزامی هستند.");
+    if (!expenseForm.title.trim() || expenseForm.amount <= 0) {
+      alert("لطفاً عنوان هزینه و مبلغ معتبر را وارد فرمایید.");
       return;
+    }
+
+    let accountId = expenseForm.accountId;
+    if (!accountId && accounts.length > 0) {
+      accountId = accounts[0].id;
     }
 
     setExpenseSaving(true);
@@ -273,6 +280,7 @@ export const FinancialView: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...expenseForm,
+          accountId,
           description: expenseForm.notes,
         }),
       }).then((r) => r.json());
@@ -281,7 +289,9 @@ export const FinancialView: React.FC = () => {
         setIsExpenseModalOpen(false);
         setEditingExpense(null);
         await fetchData();
-        alert(editingExpense ? "سند هزینه با موفقیت ویرایش شد." : "هزینه جاری با موفقیت ثبت شد.");
+        window.dispatchEvent(new CustomEvent("akma:expenses-updated"));
+        window.dispatchEvent(new CustomEvent("akma:accounts-updated"));
+        alert(editingExpense ? "سند هزینه با موفقیت ویرایش شد." : (res.message || "هزینه جاری با موفقیت ثبت شد."));
       } else {
         alert(res.error || "خطا در ثبت هزینه");
       }
@@ -306,11 +316,13 @@ export const FinancialView: React.FC = () => {
       if (res.success) {
         alert(res.message || "سند هزینه با موفقیت ابطال و حذف گردید.");
         await fetchData();
+        window.dispatchEvent(new CustomEvent("akma:expenses-updated"));
+        window.dispatchEvent(new CustomEvent("akma:accounts-updated"));
       } else {
         alert(res.error || "خطا در ابطال سند هزینه");
       }
     } catch (err: any) {
-      alert(err.message || "خطا در برقراری ارتباط با سرور");
+      alert(err.message || "خطا در ارتباط با سرور");
     }
   };
 
