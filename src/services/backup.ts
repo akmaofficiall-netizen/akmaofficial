@@ -348,28 +348,40 @@ export async function restoreBackupPayload(payload: any, userId = "system_user",
       await client.query(`TRUNCATE TABLE "${tbl}" CASCADE`);
     }
 
-    // Helper to batch insert raw records
+    // Helper to robustly insert raw records with accurate column mapping and data casting
     const insertTable = async (tableName: string, rows?: any[]) => {
       if (!rows || !Array.isArray(rows) || rows.length === 0) return 0;
       let count = 0;
       for (const row of rows) {
+        if (!row || typeof row !== "object") continue;
         const keys = Object.keys(row);
         if (keys.length === 0) continue;
+
+        // Clean column mapping: Handles both camelCase and existing snake_case
         const cols = keys.map((k) => {
-          // Convert camelCase to snake_case for DB columns
-          return `"${k.replace(/([A-Z])/g, "_$1").toLowerCase()}"`;
+          const snake = k.includes("_")
+            ? k.toLowerCase()
+            : k.replace(/([A-Z])/g, "_$1").toLowerCase();
+          return `"${snake}"`;
         }).join(", ");
+
         const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
         const values = keys.map((k) => {
           const v = row[k];
+          if (v === undefined) return null;
           if (v !== null && typeof v === "object" && !(v instanceof Date)) {
             return JSON.stringify(v);
           }
           return v;
         });
+
         const query = `INSERT INTO "${tableName}" (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`;
-        await client.query(query, values);
-        count++;
+        try {
+          await client.query(query, values);
+          count++;
+        } catch (insertErr: any) {
+          console.warn(`Warning inserting into ${tableName}:`, insertErr?.message || insertErr);
+        }
       }
       return count;
     };
