@@ -45,6 +45,7 @@ import {
   toLatinDigits,
 } from "@/lib/dateUtils";
 import { numberToPersianWords } from "@/lib/numberToWords";
+import { triggerTaxDeclarationPrint } from "@/lib/taxPrintHelper";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -312,37 +313,39 @@ export const ReportsView: React.FC<{
   };
 
   const handlePrintTaxDoc = () => {
-    if (!taxDocRef.current) return;
-    const printContent = taxDocRef.current.innerHTML;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      window.print();
-      return;
-    }
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html dir="rtl" lang="fa">
-        <head>
-          <meta charset="utf-8" />
-          <title>اظهارنامه مالیاتی رسمی</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <style>
-            @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              @page { size: A4 portrait; margin: 8mm; }
-            }
-            body { font-family: system-ui, -apple-system, sans-serif; background: #fff; color: #000; }
-          </style>
-        </head>
-        <body class="p-4 bg-white text-black">
-          ${printContent}
-          <script>
-            setTimeout(() => { window.print(); window.close(); }, 500);
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    if (!taxData) return;
+    triggerTaxDeclarationPrint({
+      taxpayer: taxData.taxpayer || {
+        businessName: "شرکت مهندسی و بازرگانی حکمت اکما",
+      },
+      statement: taxData.statement || {
+        invoiceCount: 0,
+        expenseCount: 0,
+        grossSales: 0,
+        totalDiscounts: 0,
+        netSalesRevenue: 0,
+        totalCogs: 0,
+        grossProfit: 0,
+        totalExpenses: 0,
+        totalCommissions: 0,
+        totalAllowableDeductions: 0,
+        taxableOperatingProfit: 0,
+        corporateTaxAmount: 0,
+        corporateTaxRate: 25,
+        calculatedVat: 0,
+        vatRate: 10,
+        netRetainedProfit: 0,
+      },
+      expenseBreakdown: taxData.expenseBreakdown || [],
+      period: {
+        jalaliStart: taxJalaliStart,
+        jalaliEnd: taxJalaliEnd,
+        gregorianStart: taxStartDate,
+        gregorianEnd: taxEndDate,
+      },
+      trackingNumber: docTrackingNumber,
+      creationDate: docCreationDate,
+    });
   };
 
   const handleRunInflationSim = async () => {
@@ -623,7 +626,7 @@ export const ReportsView: React.FC<{
                     <div className="text-right space-y-1 text-[11px] text-slate-700">
                       <div>شماره پرونده / پیگیری: <span className="font-mono font-bold text-slate-900">{docTrackingNumber}</span></div>
                       <div>تاریخ تنظیم: <span className="font-bold text-slate-900">{docCreationDate}</span></div>
-                      <div>دوره مالیاتی: <span className="font-bold text-slate-900">{toJalaliDate(taxStartDate)} الی {toJalaliDate(taxEndDate)}</span></div>
+                      <div>دوره مالیاتی: <span className="font-bold text-slate-900">{taxJalaliStart} الی {taxJalaliEnd}</span></div>
                     </div>
 
                     <div className="text-center space-y-1">

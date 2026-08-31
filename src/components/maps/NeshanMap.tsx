@@ -1,12 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-
-declare global {
-  interface Window {
-    neshan: any;
-  }
-}
+import { MapPin, Navigation, ZoomIn, ZoomOut, Search, ExternalLink, X, RefreshCw, Layers } from "lucide-react";
+import { NeonBadge } from "@/components/ui/NeonBadge";
 
 export interface NeshanCustomer {
   id: string;
@@ -17,7 +13,12 @@ export interface NeshanCustomer {
   healthStatus?: string;
   healthScore?: number;
   mobile?: string;
+  phone?: string;
   storeName?: string;
+  address?: string;
+  city?: string;
+  creditLimit?: number;
+  balanceDue?: number;
 }
 
 interface NeshanMapProps {
@@ -29,208 +30,398 @@ interface NeshanMapProps {
 }
 
 const HEALTH_COLORS: Record<string, string> = {
-  healthy: "#22c55e",
-  warning: "#eab308",
+  healthy: "#10b981",
+  green: "#10b981",
+  warning: "#f59e0b",
+  yellow: "#f59e0b",
   critical: "#ef4444",
-  active: "#22c55e",
-  inactive: "#94a3b8",
+  red: "#ef4444",
+  active: "#06b6d4",
+  inactive: "#64748b",
 };
 
-const TEHRAN_CENTER = [51.389, 35.6892];
+const IRAN_CITIES = [
+  { name: "تهران (مرکز)", lat: 35.6892, lng: 51.3890 },
+  { name: "تهران (بازار بزرگ)", lat: 35.6725, lng: 51.4208 },
+  { name: "کرج", lat: 35.8400, lng: 50.9391 },
+  { name: "مشهد", lat: 36.2972, lng: 59.6067 },
+  { name: "اصفهان", lat: 32.6546, lng: 51.6680 },
+  { name: "شیراز", lat: 29.5918, lng: 52.5837 },
+  { name: "تبریز", lat: 38.0800, lng: 46.2919 },
+  { name: "اهواز", lat: 31.3183, lng: 48.6706 },
+  { name: "قم", lat: 34.6401, lng: 50.8764 },
+  { name: "رشت", lat: 37.2809, lng: 49.5924 },
+  { name: "یزد", lat: 31.8974, lng: 54.3569 },
+];
 
 export const NeshanMap: React.FC<NeshanMapProps> = ({
   customers,
   selectedId,
   onSelectCustomer,
-  height = "500px",
+  height = "560px",
   neshanApiKey,
 }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const markersGroupRef = useRef<any>(null);
   const [activeCustomer, setActiveCustomer] = useState<NeshanCustomer | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [sdkLoaded, setSdkLoaded] = useState(false);
+  const [activeCity, setActiveCity] = useState(IRAN_CITIES[0]);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [mapLayer, setMapLayer] = useState<"standard" | "satellite">("standard");
 
+  const validCustomers = customers.filter(
+    (c) =>
+      c.latitude !== null &&
+      c.latitude !== undefined &&
+      c.longitude !== null &&
+      c.longitude !== undefined &&
+      !isNaN(Number(c.latitude)) &&
+      !isNaN(Number(c.longitude))
+  );
+
+  // Initialize Leaflet Map dynamically
   useEffect(() => {
-    if (window.neshan) {
-      setSdkLoaded(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://static.neshan.org/sdk/web/ol/10.0.0/neshan-sdk.min.js";
-    script.onload = () => setSdkLoaded(true);
-    script.onerror = () => {
-      console.warn("Neshan SDK failed to load, falling back to OSM");
-      setSdkLoaded(false);
+    let isMounted = true;
+
+    const initMap = async () => {
+      if (typeof window === "undefined" || !containerRef.current || mapRef.current) return;
+
+      const L = await import("leaflet");
+
+      // Load Leaflet CSS if not already present
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+      }
+
+      if (!isMounted || !containerRef.current) return;
+
+      const map = L.map(containerRef.current, {
+        center: [35.6892, 51.3890],
+        zoom: 12,
+        zoomControl: false,
+        attributionControl: false,
+      });
+
+      // Standard OSM tile layer
+      const standardLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        subdomains: ["a", "b", "c"],
+      });
+
+      standardLayer.addTo(map);
+
+      mapRef.current = map;
+      markersGroupRef.current = L.layerGroup().addTo(map);
+
+      setMapLoaded(true);
+
+      // Invalidate size on resize
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 200);
     };
-    document.head.appendChild(script);
+
+    initMap();
+
     return () => {
-      if (document.head.contains(script)) document.head.removeChild(script);
+      isMounted = false;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []);
 
+  // Update Markers
   useEffect(() => {
-    if (!sdkLoaded || !mapRef.current || mapInstance.current) return;
+    if (!mapLoaded || !mapRef.current || !markersGroupRef.current) return;
 
-    try {
-      const apiKey = neshanApiKey || "web_xxxxxxxxxxxxxxxx";
-      mapInstance.current = new window.neshan.maps.Map({
-        container: mapRef.current,
-        poi: false,
-        mapType: window.neshan.maps.MapType.NESHAN,
-        key: apiKey,
-        center: TEHRAN_CENTER,
-        zoom: 11,
-      });
+    const updateMarkers = async () => {
+      const L = await import("leaflet");
+      const group = markersGroupRef.current;
+      group.clearLayers();
 
-      mapInstance.current.on("click", (e: any) => {
-        setActiveCustomer(null);
-      });
+      const bounds = L.latLngBounds([]);
 
-      setMapReady(true);
-    } catch (err) {
-      console.error("Neshan map init error:", err);
-    }
+      validCustomers.forEach((c) => {
+        const lat = Number(c.latitude);
+        const lng = Number(c.longitude);
+        const isSelected = c.id === selectedId;
+        const color = HEALTH_COLORS[c.healthStatus || "healthy"] || "#10b981";
 
-    return () => {
-      if (mapInstance.current) {
-        mapInstance.current.destroy?.();
-        mapInstance.current = null;
-      }
-    };
-  }, [sdkLoaded, neshanApiKey]);
-
-  useEffect(() => {
-    if (!mapReady || !mapInstance.current) return;
-
-    markersRef.current.forEach((m) => m.setMap?.(null));
-    markersRef.current = [];
-
-    const validCustomers = customers.filter(
-      (c) => c.latitude != null && c.longitude != null && !isNaN(Number(c.latitude)) && !isNaN(Number(c.longitude))
-    );
-
-    validCustomers.forEach((c) => {
-      const color = HEALTH_COLORS[c.healthStatus || "active"] || "#3b82f6";
-      const isSelected = c.id === selectedId;
-
-      try {
-        const marker = new window.neshan.maps.Marker({
-          element: (() => {
-            const el = document.createElement("div");
-            el.style.cssText = `
-              width:${isSelected ? 20 : 14}px;
-              height:${isSelected ? 20 : 14}px;
-              border-radius:50%;
-              background:${color};
-              border:${isSelected ? "3px solid #ffffff" : "2px solid #ffffff"};
-              box-shadow:0 1px 4px rgba(0,0,0,0.3);
-              cursor:pointer;
-              transition:transform 0.15s;
-            `;
-            el.onmouseenter = () => { el.style.transform = "scale(1.3)"; };
-            el.onmouseleave = () => { el.style.transform = "scale(1)"; };
-            return el;
-          })(),
-          position: [Number(c.longitude), Number(c.latitude)],
+        const customIcon = L.divIcon({
+          className: "custom-neshan-pin",
+          html: `
+            <div style="
+              position: relative;
+              width: ${isSelected ? "32px" : "24px"};
+              height: ${isSelected ? "32px" : "24px"};
+              border-radius: 50%;
+              background: ${color};
+              border: 3px solid #ffffff;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              transition: transform 0.2s ease;
+            ">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #ffffff;"></span>
+              ${isSelected ? `<span style="position: absolute; inset: -4px; border-radius: 50%; border: 2px solid ${color}; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></span>` : ""}
+            </div>
+          `,
+          iconSize: [isSelected ? 32 : 24, isSelected ? 32 : 24],
+          iconAnchor: [isSelected ? 16 : 12, isSelected ? 16 : 12],
         });
 
-        marker.addListener?.("click", () => {
+        const marker = L.marker([lat, lng], { icon: customIcon });
+
+        marker.on("click", () => {
           setActiveCustomer(c);
           onSelectCustomer?.(c);
+          mapRef.current?.setView([lat, lng], 15, { animate: true });
         });
 
-        marker.setMap?.(mapInstance.current);
-        markersRef.current.push(marker);
-      } catch {}
-    });
+        marker.bindTooltip(`
+          <div style="font-family: 'Vazirmatn', sans-serif; direction: rtl; text-align: right; padding: 2px 4px;">
+            <strong>${c.storeName || c.name}</strong>
+            <div style="font-size: 10px; color: #64748b;">${c.mobile || ""}</div>
+          </div>
+        `, { direction: "top", offset: [0, -14] });
 
-    if (validCustomers.length > 0 && !selectedId) {
-      try {
-        const bounds = validCustomers.reduce(
-          (b, c) => {
-            const lng = Number(c.longitude);
-            const lat = Number(c.latitude);
-            return {
-              minLng: Math.min(b.minLng, lng),
-              maxLng: Math.max(b.maxLng, lng),
-              minLat: Math.min(b.minLat, lat),
-              maxLat: Math.max(b.maxLat, lat),
-            };
-          },
-          { minLng: 180, maxLng: -180, minLat: 90, maxLat: -90 }
-        );
-        mapInstance.current.setCenter?.([
-          (bounds.minLng + bounds.maxLng) / 2,
-          (bounds.minLat + bounds.maxLat) / 2,
-        ]);
-        mapInstance.current.setZoom?.(12);
-      } catch {}
+        group.addLayer(marker);
+        bounds.extend([lat, lng]);
+      });
+
+      if (selectedId) {
+        const found = validCustomers.find((c) => c.id === selectedId);
+        if (found && found.latitude && found.longitude) {
+          setActiveCustomer(found);
+          mapRef.current.setView([Number(found.latitude), Number(found.longitude)], 15, { animate: true });
+          return;
+        }
+      }
+
+      if (validCustomers.length > 0 && bounds.isValid()) {
+        mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }
+    };
+
+    updateMarkers();
+  }, [validCustomers, selectedId, mapLoaded]);
+
+  // Handle City Jump
+  const handleCityJump = (city: typeof IRAN_CITIES[0]) => {
+    setActiveCity(city);
+    if (mapRef.current) {
+      mapRef.current.setView([city.lat, city.lng], 13, { animate: true });
     }
-  }, [customers, selectedId, mapReady]);
+  };
 
-  const withLocation = customers.filter((c) => c.latitude != null && c.longitude != null);
-  const withoutLocation = customers.filter((c) => c.latitude == null || c.longitude == null);
+  // Search with Neshan Proxy API
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    try {
+      const center = mapRef.current?.getCenter() || { lat: 35.6892, lng: 51.3890 };
+      const keyParam = neshanApiKey ? `&apiKey=${encodeURIComponent(neshanApiKey)}` : "";
+      const res = await fetch(`/api/maps/neshan?action=search&term=${encodeURIComponent(searchQuery)}&lat=${center.lat}&lng=${center.lng}${keyParam}`);
+      const data = await res.json();
+      if (data.success && data.items && data.items.length > 0) {
+        setSearchResults(data.items);
+      } else {
+        const matchingCities = IRAN_CITIES.filter((c) => c.name.includes(searchQuery));
+        setSearchResults(matchingCities.map((c) => ({ title: c.name, location: { x: c.lng, y: c.lat } })));
+      }
+    } catch (e) {
+      console.warn("Search error:", e);
+    } finally {
+      setSearching(false);
+    }
+  };
 
   return (
-    <div className="space-y-3">
-      <div className="relative rounded-2xl overflow-hidden border border-slate-700" style={{ height }}>
-        <div ref={mapRef} className="w-full h-full" />
-        {!sdkLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90 text-slate-400 text-sm">
-            <div className="text-center space-y-2">
-              <div>نقشه در حال بارگذاری...</div>
-              <div className="text-[10px]">SDK نشان بارگذاری نشد. از API Key صحیح مطمئن شوید.</div>
+    <div className="space-y-4">
+      {/* Top Controls: City Presets & Search */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        {/* City Presets */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+          <span className="text-xs text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+            <Navigation className="h-3.5 w-3.5 text-cyan-400" />
+            پرش سریع:
+          </span>
+          {IRAN_CITIES.map((city) => (
+            <button
+              key={city.name}
+              onClick={() => handleCityJump(city)}
+              className={`text-xs px-2.5 py-1.5 rounded-xl whitespace-nowrap transition border ${
+                activeCity.name === city.name
+                  ? "bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold shadow-sm"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
+              }`}
+            >
+              {city.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Live Search Input with Neshan API */}
+        <div className="relative min-w-[260px]">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder="جستجوی خیابان یا محله در نشان..."
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 pr-9 pl-16 py-1.5 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+            />
+            <button
+              onClick={handleSearch}
+              disabled={searching}
+              className="absolute left-1 top-1/2 -translate-y-1/2 rounded-lg bg-cyan-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-cyan-500 transition disabled:opacity-50"
+            >
+              {searching ? "..." : "جستجو"}
+            </button>
+          </div>
+
+          {searchResults.length > 0 && (
+            <div className="absolute top-full right-0 left-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-2xl">
+              {searchResults.map((r, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    const lat = r.location?.y || r.lat;
+                    const lng = r.location?.x || r.lng;
+                    if (lat && lng && mapRef.current) {
+                      mapRef.current.setView([lat, lng], 15, { animate: true });
+                    }
+                    setSearchResults([]);
+                    setSearchQuery(r.title || r.name || "");
+                  }}
+                  className="w-full text-right p-2 text-xs text-slate-200 hover:bg-slate-800 rounded-lg transition border-b border-slate-800/60 last:border-none"
+                >
+                  <div className="font-bold text-white">{r.title || r.name}</div>
+                  {r.address && <div className="text-[10px] text-slate-400 truncate">{r.address}</div>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Map Box */}
+      <div className="relative rounded-3xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl" style={{ height }}>
+        <div ref={containerRef} className="w-full h-full z-0" />
+
+        {/* Map Overlay Controls */}
+        <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+          <div className="flex flex-col rounded-2xl border border-slate-700/80 bg-slate-900/90 backdrop-blur-md p-1 shadow-xl">
+            <button
+              onClick={() => mapRef.current?.zoomIn()}
+              title="بزرگ‌نمایی"
+              className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+            <div className="h-px bg-slate-800 my-0.5" />
+            <button
+              onClick={() => mapRef.current?.zoomOut()}
+              title="کوچک‌نمایی"
+              className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Floating Customer Count Badge */}
+        <div className="absolute top-4 left-4 z-10">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-700/80 bg-slate-900/90 backdrop-blur-md px-3.5 py-2 text-xs shadow-xl">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-white font-bold">{validCustomers.length}</span>
+            <span className="text-slate-400">مشتری روی نقشه</span>
+          </div>
+        </div>
+
+        {/* Floating Active Customer Card */}
+        {activeCustomer && (
+          <div className="absolute bottom-4 left-4 right-4 z-10 rounded-2xl border border-cyan-500/50 bg-slate-900/95 backdrop-blur-md p-4 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-cyan-400 shrink-0" />
+                <h4 className="font-bold text-white text-sm">
+                  {activeCustomer.storeName || activeCustomer.name}
+                </h4>
+                {activeCustomer.code && (
+                  <span className="font-mono text-[10px] text-cyan-300 bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-md">
+                    {activeCustomer.code}
+                  </span>
+                )}
+                <NeonBadge
+                  variant={
+                    activeCustomer.healthStatus === "green"
+                      ? "green"
+                      : activeCustomer.healthStatus === "yellow"
+                      ? "yellow"
+                      : "red"
+                  }
+                >
+                  سلامت {activeCustomer.healthScore || 100}
+                </NeonBadge>
+              </div>
+              <p className="text-xs text-slate-300">
+                {activeCustomer.address || activeCustomer.city || "تهران"} · شماره همراه:{" "}
+                <span className="font-mono text-cyan-300 font-bold">{activeCustomer.mobile || "—"}</span>
+              </p>
+              <p className="text-[11px] text-slate-400 font-mono">
+                مختصات: {Number(activeCustomer.latitude).toFixed(6)} , {Number(activeCustomer.longitude).toFixed(6)}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+              <a
+                href={`https://nshn.ir/?lat=${activeCustomer.latitude}&lng=${activeCustomer.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-300 hover:text-white hover:bg-emerald-900/60 transition font-bold"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                مسیریابی در نشان
+              </a>
+              <a
+                href={`https://www.google.com/maps?q=${activeCustomer.latitude},${activeCustomer.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200 hover:text-white hover:border-slate-600 transition font-medium"
+              >
+                گوگل‌مپ
+              </a>
+              <a
+                href={`https://balad.ir/location?latitude=${activeCustomer.latitude}&longitude=${activeCustomer.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200 hover:text-white hover:border-slate-600 transition font-medium"
+              >
+                بلد
+              </a>
+              <button
+                onClick={() => setActiveCustomer(null)}
+                className="rounded-xl border border-slate-700 p-2 text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}
-      </div>
-
-      {activeCustomer && (
-        <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 text-xs text-slate-300 flex justify-between items-center">
-          <div>
-            <span className="font-bold text-white">{activeCustomer.name}</span>
-            {activeCustomer.storeName && <span className="mr-2 text-slate-400">({activeCustomer.storeName})</span>}
-            {activeCustomer.mobile && <span className="mr-2 text-slate-400">{activeCustomer.mobile}</span>}
-            <span className="mr-2 text-slate-500">
-              [{Number(activeCustomer.latitude).toFixed(6)}, {Number(activeCustomer.longitude).toFixed(6)}]
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <a
-              href={`https://nshn.ir/${Number(activeCustomer.latitude)},${Number(activeCustomer.longitude)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-500"
-            >
-              نشان
-            </a>
-            <a
-              href={`https://www.google.com/maps?q=${activeCustomer.latitude},${activeCustomer.longitude}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg bg-blue-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-blue-500"
-            >
-              Google Maps
-            </a>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-3 text-[11px]">
-        <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-2.5 text-center">
-          <div className="text-lg font-black text-white">{customers.length}</div>
-          <div className="text-slate-400">کل مشتریان</div>
-        </div>
-        <div className="rounded-xl border border-emerald-700/50 bg-emerald-950/30 p-2.5 text-center">
-          <div className="text-lg font-black text-emerald-400">{withLocation.length}</div>
-          <div className="text-slate-400">دارای لوکیشن</div>
-        </div>
-        <div className="rounded-xl border border-rose-700/50 bg-rose-950/30 p-2.5 text-center">
-          <div className="text-lg font-black text-rose-400">{withoutLocation.length}</div>
-          <div className="text-slate-400">بدون لوکیشن</div>
-        </div>
       </div>
     </div>
   );

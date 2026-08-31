@@ -11,7 +11,11 @@ export async function GET(req: Request) {
     const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, "main_config")).limit(1);
 
     const safeSettings = settings
-      ? { ...settings, openaiApiKey: settings.openaiApiKey ? "••••••••" : "" }
+      ? {
+          ...settings,
+          openaiApiKey: settings.openaiApiKey ? "••••••••" : "",
+          neshanApiKey: settings.neshanApiKey || "service.3a9a6b9c59054a20a4786affab22c5d7",
+        }
       : {
           businessName: "سازمان و کسب‌وکار حکمت آکما",
           economicCode: "",
@@ -25,6 +29,8 @@ export async function GET(req: Request) {
           vatRate: 10,
           currency: "تومان",
           aiEnabled: true,
+          mapProvider: "neshan",
+          neshanApiKey: "service.3a9a6b9c59054a20a4786affab22c5d7",
         };
 
     return NextResponse.json({ success: true, settings: safeSettings });

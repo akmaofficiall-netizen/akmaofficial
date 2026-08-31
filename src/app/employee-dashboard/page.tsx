@@ -1119,8 +1119,14 @@ export default function EmployeeDashboardPage() {
             <NeshanMapPicker
               latitude={customerForm.latitude}
               longitude={customerForm.longitude}
-              onChange={({ latitude, longitude }) =>
-                setCustomerForm((prev: any) => ({ ...prev, latitude, longitude }))
+              onChange={({ latitude, longitude, address, city }) =>
+                setCustomerForm((prev: any) => ({
+                  ...prev,
+                  latitude,
+                  longitude,
+                  address: prev.address?.trim() ? prev.address : (address || prev.address),
+                  city: prev.city?.trim() ? prev.city : (city || prev.city),
+                }))
               }
             />
 

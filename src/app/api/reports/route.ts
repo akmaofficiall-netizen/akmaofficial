@@ -23,10 +23,27 @@ export async function GET(req: Request) {
     const customerId = searchParams.get("customerId");
     const employeeId = searchParams.get("employeeId");
 
+    let parsedStartDate: Date | null = null;
+    let parsedEndDate: Date | null = null;
+
+    if (startDateStr) {
+      parsedStartDate = new Date(startDateStr);
+      if (startDateStr.length <= 10 && !isNaN(parsedStartDate.getTime())) {
+        parsedStartDate.setHours(0, 0, 0, 0);
+      }
+    }
+
+    if (endDateStr) {
+      parsedEndDate = new Date(endDateStr);
+      if (endDateStr.length <= 10 && !isNaN(parsedEndDate.getTime())) {
+        parsedEndDate.setHours(23, 59, 59, 999);
+      }
+    }
+
     const filter = {
       projectId: projectId || null,
-      startDate: startDateStr ? new Date(startDateStr) : null,
-      endDate: endDateStr ? new Date(endDateStr) : null,
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
       customerId: customerId || null,
       employeeId: employeeId || null,
     };

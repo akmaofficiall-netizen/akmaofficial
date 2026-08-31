@@ -515,8 +515,14 @@ export const CustomersView: React.FC<{ selectedProjectId?: string | null }> = ({
                 <NeshanMapPicker
                   latitude={formData.latitude}
                   longitude={formData.longitude}
-                  onChange={({ latitude, longitude }) =>
-                    setFormData((prev) => ({ ...prev, latitude, longitude }))
+                  onChange={({ latitude, longitude, address, city }) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      latitude,
+                      longitude,
+                      address: prev.address?.trim() ? prev.address : (address || prev.address),
+                      city: prev.city?.trim() ? prev.city : (city || prev.city),
+                    }))
                   }
                   neshanApiKey={neshanApiKey}
                 />
