@@ -98,6 +98,15 @@ export interface BackupPayload {
 }
 
 export async function createSystemBackup(userId = "system_user", userName = "مدیر سیستم") {
+  const safeSelect = async (table: any) => {
+    try {
+      return await db.select().from(table);
+    } catch (err: any) {
+      console.warn("safeSelect warning for table:", err?.message || err);
+      return [];
+    }
+  };
+
   const [
     sysSettingsList,
     projectsList,
@@ -140,46 +149,46 @@ export async function createSystemBackup(userId = "system_user", userName = "م�
     alertsList,
     tasksList,
   ] = await Promise.all([
-    db.select().from(systemSettings),
-    db.select().from(projects),
-    db.select().from(customers),
-    db.select().from(customerProjectMemberships),
-    db.select().from(customerHealthLogs),
-    db.select().from(customerAssignments),
-    db.select().from(employees),
-    db.select().from(employeeProjectMemberships),
-    db.select().from(roles),
-    db.select().from(permissions),
-    db.select().from(rolePermissions),
-    db.select().from(employeeAccounts),
-    db.select().from(employeeProjectAssignments),
-    db.select().from(projectCompensations),
-    db.select().from(projectTargets),
-    db.select().from(payrollRecords),
-    db.select().from(commissionRules),
-    db.select().from(commissionLedger),
-    db.select().from(suppliers),
-    db.select().from(rawMaterials),
-    db.select().from(rawMaterialPriceHistory),
-    db.select().from(products),
-    db.select().from(productRecipes),
-    db.select().from(projectProductPrices),
-    db.select().from(warehouses),
-    db.select().from(inventoryLedger),
-    db.select().from(purchases),
-    db.select().from(purchaseItems),
-    db.select().from(productionBatches),
-    db.select().from(productionBatchItems),
-    db.select().from(invoices),
-    db.select().from(invoiceItems),
-    db.select().from(accounts),
-    db.select().from(payments),
-    db.select().from(paymentAllocations),
-    db.select().from(expenses),
-    db.select().from(consignments),
-    db.select().from(consignmentItems),
-    db.select().from(alerts),
-    db.select().from(tasks),
+    safeSelect(systemSettings),
+    safeSelect(projects),
+    safeSelect(customers),
+    safeSelect(customerProjectMemberships),
+    safeSelect(customerHealthLogs),
+    safeSelect(customerAssignments),
+    safeSelect(employees),
+    safeSelect(employeeProjectMemberships),
+    safeSelect(roles),
+    safeSelect(permissions),
+    safeSelect(rolePermissions),
+    safeSelect(employeeAccounts),
+    safeSelect(employeeProjectAssignments),
+    safeSelect(projectCompensations),
+    safeSelect(projectTargets),
+    safeSelect(payrollRecords),
+    safeSelect(commissionRules),
+    safeSelect(commissionLedger),
+    safeSelect(suppliers),
+    safeSelect(rawMaterials),
+    safeSelect(rawMaterialPriceHistory),
+    safeSelect(products),
+    safeSelect(productRecipes),
+    safeSelect(projectProductPrices),
+    safeSelect(warehouses),
+    safeSelect(inventoryLedger),
+    safeSelect(purchases),
+    safeSelect(purchaseItems),
+    safeSelect(productionBatches),
+    safeSelect(productionBatchItems),
+    safeSelect(invoices),
+    safeSelect(invoiceItems),
+    safeSelect(accounts),
+    safeSelect(payments),
+    safeSelect(paymentAllocations),
+    safeSelect(expenses),
+    safeSelect(consignments),
+    safeSelect(consignmentItems),
+    safeSelect(alerts),
+    safeSelect(tasks),
   ]);
 
   const now = new Date();
@@ -269,22 +278,32 @@ export async function createSystemBackup(userId = "system_user", userName = "م�
 }
 
 export async function getBackupsList() {
-  return await db
-    .select({
-      id: backups.id,
-      filename: backups.filename,
-      sizeBytes: backups.sizeBytes,
-      checksum: backups.checksum,
-      status: backups.status,
-      createdAt: backups.createdAt,
-    })
-    .from(backups)
-    .orderBy(desc(backups.createdAt));
+  try {
+    return await db
+      .select({
+        id: backups.id,
+        filename: backups.filename,
+        sizeBytes: backups.sizeBytes,
+        checksum: backups.checksum,
+        status: backups.status,
+        createdAt: backups.createdAt,
+      })
+      .from(backups)
+      .orderBy(desc(backups.createdAt));
+  } catch (err: any) {
+    console.warn("getBackupsList failed:", err?.message || err);
+    return [];
+  }
 }
 
 export async function getBackupById(id: string) {
-  const [backup] = await db.select().from(backups).where(eq(backups.id, id)).limit(1);
-  return backup || null;
+  try {
+    const [backup] = await db.select().from(backups).where(eq(backups.id, id)).limit(1);
+    return backup || null;
+  } catch (err: any) {
+    console.warn("getBackupById failed:", err?.message || err);
+    return null;
+  }
 }
 
 export async function restoreBackupPayload(payload: any, userId = "system_user", userName = "مدیر سیستم") {

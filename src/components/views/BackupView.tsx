@@ -15,13 +15,34 @@ export const BackupView: React.FC = () => {
   const [restoreStats, setRestoreStats] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const safeFetchJson = async (url: string, options?: RequestInit) => {
+    try {
+      const res = await fetch(url, options);
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        if (!res.ok) {
+          throw new Error(`خطای سرور (${res.status}): لطفا مجددا تلاش فرمایید.`);
+        }
+        throw new Error("پاسخ سرور در قالب استاندارد نیست.");
+      }
+      return data;
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
   const fetchBackups = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/backups").then((r) => r.json());
-      if (res.success) setBackups(res.backups || []);
+      const data = await safeFetchJson("/api/backups");
+      if (data && data.success) {
+        setBackups(data.backups || []);
+      }
     } catch (err) {
-      console.error("Error fetching backups:", err);
+      console.warn("Notice fetching backups:", err);
     } finally {
       setLoading(false);
     }
@@ -34,15 +55,15 @@ export const BackupView: React.FC = () => {
   const handleCreateBackup = async () => {
     setCreating(true);
     try {
-      const res = await fetch("/api/backups", { method: "POST" }).then((r) => r.json());
-      if (res.success) {
+      const data = await safeFetchJson("/api/backups", { method: "POST" });
+      if (data && data.success) {
         await fetchBackups();
-        alert("پشتیبان‌گیری کامل دیتابیس با هش checksum اختصاصی با موفقیت انجام و ذخیره شد.");
+        alert("پشتیبان‌گیری کامل دیتابیس با هش Checksum اختصاصی با موفقیت انجام و ثبت شد.");
       } else {
-        alert(res.error || "خطا در ایجاد پشتیبان");
+        alert(data?.error || "خطا در ایجاد پشتیبان");
       }
     } catch (err: any) {
-      alert(err.message || "خطا در سیستم");
+      alert(err.message || "خطا در سیستم پشتیبان‌گیری");
     } finally {
       setCreating(false);
     }
@@ -52,16 +73,16 @@ export const BackupView: React.FC = () => {
     setRestoring(true);
     setRestoreStats(null);
     try {
-      const res = await fetch(`/api/backups/${backupId}/restore`, {
+      const data = await safeFetchJson(`/api/backups/${backupId}/restore`, {
         method: "POST",
-      }).then((r) => r.json());
+      });
 
-      if (res.success) {
-        setRestoreStats(res.restoredStats);
+      if (data && data.success) {
+        setRestoreStats(data.restoredStats);
         setSelectedBackupForRestore(null);
         alert("بازیابی دیتابیس با موفقیت کامل انجام شد.");
       } else {
-        alert(res.error || "خطا در بازیابی پشتیبان");
+        alert(data?.error || "خطا در بازیابی پشتیبان");
       }
     } catch (err: any) {
       alert(err.message || "خطا در برقراری ارتباط با سرور");
@@ -77,19 +98,19 @@ export const BackupView: React.FC = () => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/backups/restore", {
+      const data = await safeFetchJson("/api/backups/restore", {
         method: "POST",
         body: formData,
-      }).then((r) => r.json());
+      });
 
-      if (res.success) {
-        setRestoreStats(res.restoredStats);
+      if (data && data.success) {
+        setRestoreStats(data.restoredStats);
         setRestoreFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         await fetchBackups();
         alert("فایل پشتیبان با موفقیت بر روی دیتابیس بازیابی شد.");
       } else {
-        alert(res.error || "خطا در بازیابی فایل پشتیبان");
+        alert(data?.error || "خطا در بازیابی فایل پشتیبان");
       }
     } catch (err: any) {
       alert(err.message || "خطا در بارگذاری یا بازگردانی فایل");
