@@ -2,7 +2,9 @@ import crypto from "node:crypto";
 import { db } from "@/db";
 import { employees, employeeAccounts, roles } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
+declare global {
+  var __akmaDevAuthSecret: string | undefined;
+}
 const secret = () => {
   const value = process.env.AUTH_SECRET || process.env.AUTH_SALT;
   if (value) return value;
