@@ -15,7 +15,6 @@ const secret = () => {
   if (!globalThis.__akmaDevAuthSecret) {
     globalThis.__akmaDevAuthSecret = crypto.randomBytes(32).toString("hex");
   }
-  console.warn("⚠️ AUTH_SECRET تنظیم نشده است. از رمز تصادفی توسعه استفاده می‌شود (فقط در محیط توسعه).");
   return globalThis.__akmaDevAuthSecret;
 };
 

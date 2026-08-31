@@ -630,6 +630,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
               <tr>
                 <th className="py-3.5 px-4">شماره فاکتور</th>
                 <th className="py-3.5 px-4">خریدار / فروشگاه</th>
+                <th className="py-3.5 px-4">ویزیتور / مسئول فروش</th>
                 <th className="py-3.5 px-4">پروژه</th>
                 <th className="py-3.5 px-4">مبلغ کل (تومان)</th>
                 <th className="py-3.5 px-4">تسویه شده / مانده</th>
@@ -641,14 +642,14 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
             <tbody className="divide-y divide-slate-800/60 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500">
+                  <td colSpan={9} className="py-12 text-center text-slate-500">
                     <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-500 mb-2" />
                     در حال بارگذاری فاکتورها...
                   </td>
                 </tr>
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500">
+                  <td colSpan={9} className="py-12 text-center text-slate-500">
                     هیچ فاکتوری با شرایط انتخابی یافت نشد.
                   </td>
                 </tr>
@@ -662,6 +663,16 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                     <td className="py-3.5 px-4 font-bold text-slate-200">
                       <div>{inv.customerName || "—"}</div>
                       {inv.customerStore && <div className="text-[11px] text-slate-500 font-normal">{inv.customerStore}</div>}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {inv.employeeName && inv.employeeName !== "-" ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl bg-purple-950/40 border border-purple-800/40 px-2.5 py-1 text-[11px] text-purple-300 font-medium">
+                          <User className="h-3 w-3 text-purple-400" />
+                          {inv.employeeName}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-[11px]">مستقیم / دفتر</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="rounded-xl bg-slate-800 px-2.5 py-1 text-[11px] text-slate-300">
