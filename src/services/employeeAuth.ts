@@ -3,6 +3,10 @@ import { db } from "@/db";
 import { employees, employeeAccounts, roles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+declare global {
+  var __akmaDevAuthSecret: string | undefined;
+}
+
 const secret = () => {
   const value = process.env.AUTH_SECRET || process.env.AUTH_SALT;
   if (value) return value;
@@ -13,7 +17,6 @@ const secret = () => {
   if (!globalThis.__akmaDevAuthSecret) {
     globalThis.__akmaDevAuthSecret = crypto.randomBytes(32).toString("hex");
   }
-  console.warn("⚠️ AUTH_SECRET تنظیم نشده است. از رمز تصادفی توسعه استفاده می‌شود (فقط در محیط توسعه).");
   return globalThis.__akmaDevAuthSecret;
 };
 

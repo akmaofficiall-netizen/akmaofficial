@@ -33,7 +33,17 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts";
-import { toJalaliDate, formatMoney, formatMoneyDual, formatNumber, jalaliToGregorian } from "@/lib/dateUtils";
+import {
+  toJalaliDate,
+  formatMoney,
+  formatMoneyDual,
+  formatNumber,
+  jalaliToGregorian,
+  parseJalaliString,
+  gregorianToJalali,
+  jalaliToString,
+  toLatinDigits,
+} from "@/lib/dateUtils";
 import { numberToPersianWords } from "@/lib/numberToWords";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -58,9 +68,12 @@ export const ReportsView: React.FC<{
   // Tax Declaration state
   const [taxData, setTaxData] = useState<any>(null);
   const [taxLoading, setTaxLoading] = useState(false);
-  const [taxPreset, setTaxPreset] = useState("year1403");
-  const [taxStartDate, setTaxStartDate] = useState(() => jalaliToGregorian({ year: 1403, month: 1, day: 1 }).toISOString().split("T")[0]);
-  const [taxEndDate, setTaxEndDate] = useState(() => jalaliToGregorian({ year: 1403, month: 12, day: 29 }).toISOString().split("T")[0]);
+  const [taxPreset, setTaxPreset] = useState("year1404");
+  const [taxJalaliStart, setTaxJalaliStart] = useState("1404/01/01");
+  const [taxJalaliEnd, setTaxJalaliEnd] = useState("1404/12/29");
+  const [taxStartDate, setTaxStartDate] = useState(() => jalaliToGregorian({ year: 1404, month: 1, day: 1 }).toISOString().split("T")[0]);
+  const [taxEndDate, setTaxEndDate] = useState(() => jalaliToGregorian({ year: 1404, month: 12, day: 29 }).toISOString().split("T")[0]);
+  const [taxDateError, setTaxDateError] = useState("");
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const taxDocRef = useRef<HTMLDivElement>(null);
   const [docTrackingNumber] = useState(() => `TX-${Math.floor(10000000 + Math.random() * 90000000)}`);
@@ -121,33 +134,148 @@ export const ReportsView: React.FC<{
 
   useEffect(() => {
     fetchData();
-    fetchTaxDeclaration();
+    fetchTaxDeclaration(taxStartDate, taxEndDate);
   }, [selectedProjectId]);
 
   const handlePresetChange = (preset: string) => {
     setTaxPreset(preset);
-    let jStart = { year: 1403, month: 1, day: 1 };
-    let jEnd = { year: 1403, month: 12, day: 29 };
+    setTaxDateError("");
+    let jStart = { year: 1404, month: 1, day: 1 };
+    let jEnd = { year: 1404, month: 12, day: 29 };
 
-    if (preset === "year1403") {
-      jStart = { year: 1403, month: 1, day: 1 };
-      jEnd = { year: 1403, month: 12, day: 29 };
-    } else if (preset === "spring1403") {
-      jStart = { year: 1403, month: 1, day: 1 };
-      jEnd = { year: 1403, month: 3, day: 31 };
-    } else if (preset === "summer1403") {
-      jStart = { year: 1403, month: 4, day: 1 };
-      jEnd = { year: 1403, month: 6, day: 30 };
-    } else if (preset === "autumn1403") {
-      jStart = { year: 1403, month: 7, day: 1 };
-      jEnd = { year: 1403, month: 9, day: 29 };
-    } else if (preset === "winter1403") {
-      jStart = { year: 1403, month: 10, day: 1 };
-      jEnd = { year: 1404, month: 1, day: 1 };
-    } else if (preset === "year1404") {
+    if (preset === "year1404") {
       jStart = { year: 1404, month: 1, day: 1 };
       jEnd = { year: 1404, month: 12, day: 29 };
+    } else if (preset === "year1405") {
+      jStart = { year: 1405, month: 1, day: 1 };
+      jEnd = { year: 1405, month: 12, day: 29 };
+    } else if (preset === "range1404_1405") {
+      jStart = { year: 1404, month: 1, day: 1 };
+      jEnd = { year: 1405, month: 12, day: 29 };
+    } else if (preset === "year1403") {
+      jStart = { year: 1403, month: 1, day: 1 };
+      jEnd = { year: 1403, month: 12, day: 29 };
+    } else if (preset === "spring1404") {
+      jStart = { year: 1404, month: 1, day: 1 };
+      jEnd = { year: 1404, month: 3, day: 31 };
+    } else if (preset === "summer1404") {
+      jStart = { year: 1404, month: 4, day: 1 };
+      jEnd = { year: 1404, month: 6, day: 31 };
+    } else if (preset === "autumn1404") {
+      jStart = { year: 1404, month: 7, day: 1 };
+      jEnd = { year: 1404, month: 9, day: 30 };
+    } else if (preset === "winter1404") {
+      jStart = { year: 1404, month: 10, day: 1 };
+      jEnd = { year: 1404, month: 12, day: 29 };
+    } else if (preset === "spring1405") {
+      jStart = { year: 1405, month: 1, day: 1 };
+      jEnd = { year: 1405, month: 3, day: 31 };
+    } else if (preset === "summer1405") {
+      jStart = { year: 1405, month: 4, day: 1 };
+      jEnd = { year: 1405, month: 6, day: 31 };
+    } else if (preset === "autumn1405") {
+      jStart = { year: 1405, month: 7, day: 1 };
+      jEnd = { year: 1405, month: 9, day: 30 };
+    } else if (preset === "winter1405") {
+      jStart = { year: 1405, month: 10, day: 1 };
+      jEnd = { year: 1405, month: 12, day: 29 };
     }
+
+    const startJalaliStr = jalaliToString(jStart);
+    const endJalaliStr = jalaliToString(jEnd);
+    setTaxJalaliStart(startJalaliStr);
+    setTaxJalaliEnd(endJalaliStr);
+
+    const s = jalaliToGregorian(jStart).toISOString().split("T")[0];
+    const e = jalaliToGregorian(jEnd).toISOString().split("T")[0];
+    setTaxStartDate(s);
+    setTaxEndDate(e);
+    fetchTaxDeclaration(s, e);
+  };
+
+  const handleJalaliDateChange = (type: "start" | "end", rawVal: string) => {
+    setTaxPreset("custom");
+    setTaxDateError("");
+    const latinVal = toLatinDigits(rawVal.trim());
+
+    if (type === "start") {
+      setTaxJalaliStart(latinVal);
+      const parsedStart = parseJalaliString(latinVal);
+      const parsedEnd = parseJalaliString(taxJalaliEnd);
+      if (parsedStart && !isNaN(parsedStart.getTime())) {
+        const s = parsedStart.toISOString().split("T")[0];
+        setTaxStartDate(s);
+        if (parsedEnd && parsedStart <= parsedEnd) {
+          fetchTaxDeclaration(s, taxEndDate);
+        }
+      }
+    } else {
+      setTaxJalaliEnd(latinVal);
+      const parsedStart = parseJalaliString(taxJalaliStart);
+      const parsedEnd = parseJalaliString(latinVal);
+      if (parsedEnd && !isNaN(parsedEnd.getTime())) {
+        const e = parsedEnd.toISOString().split("T")[0];
+        setTaxEndDate(e);
+        if (parsedStart && parsedStart <= parsedEnd) {
+          fetchTaxDeclaration(taxStartDate, e);
+        }
+      }
+    }
+  };
+
+  const handleApplyYearAndQuarter = (fromYear: number, toYear: number, quarter: string) => {
+    setTaxPreset("custom");
+    setTaxDateError("");
+
+    let mStart = 1;
+    let dStart = 1;
+    let mEnd = 12;
+    let dEnd = 29;
+
+    if (quarter === "full") {
+      mStart = 1;
+      dStart = 1;
+      mEnd = 12;
+      dEnd = 29;
+    } else if (quarter === "q1") {
+      mStart = 1;
+      dStart = 1;
+      mEnd = 3;
+      dEnd = 31;
+    } else if (quarter === "q2") {
+      mStart = 4;
+      dStart = 1;
+      mEnd = 6;
+      dEnd = 31;
+    } else if (quarter === "q3") {
+      mStart = 7;
+      dStart = 1;
+      mEnd = 9;
+      dEnd = 30;
+    } else if (quarter === "q4") {
+      mStart = 10;
+      dStart = 1;
+      mEnd = 12;
+      dEnd = 29;
+    } else if (quarter === "h1") {
+      mStart = 1;
+      dStart = 1;
+      mEnd = 6;
+      dEnd = 31;
+    } else if (quarter === "h2") {
+      mStart = 7;
+      dStart = 1;
+      mEnd = 12;
+      dEnd = 29;
+    }
+
+    const jStart = { year: fromYear, month: mStart, day: dStart };
+    const jEnd = { year: toYear, month: mEnd, day: dEnd };
+
+    const startJalaliStr = jalaliToString(jStart);
+    const endJalaliStr = jalaliToString(jEnd);
+    setTaxJalaliStart(startJalaliStr);
+    setTaxJalaliEnd(endJalaliStr);
 
     const s = jalaliToGregorian(jStart).toISOString().split("T")[0];
     const e = jalaliToGregorian(jEnd).toISOString().split("T")[0];
@@ -351,69 +479,122 @@ export const ReportsView: React.FC<{
             </div>
 
             {/* Presets & Custom Dates */}
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-400 ml-1">دوره‌های پیش‌فرض:</span>
-                {[
-                  { id: "year1403", label: "کل سال مالی ۱۴۰۳" },
-                  { id: "spring1403", label: "فصل بهار ۱۴۰۳" },
-                  { id: "summer1403", label: "فصل تابستان ۱۴۰۳" },
-                  { id: "autumn1403", label: "فصل پاییز ۱۴۰۳" },
-                  { id: "winter1403", label: "فصل زمستان ۱۴۰۳" },
-                  { id: "year1404", label: "سال مالی ۱۴۰۴" },
-                ].map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handlePresetChange(p.id)}
-                    className={`rounded-lg px-3 py-1.5 text-xs transition ${
-                      taxPreset === p.id
-                        ? "bg-amber-600 text-white font-bold shadow-md shadow-amber-600/30"
-                        : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+            <div className="space-y-4">
+              {/* Ready Presets Bar */}
+              <div>
+                <div className="text-xs text-slate-400 font-semibold mb-2">دوره‌های مالیاتی آماده و سریع:</div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: "range1404_1405", label: "دوره ۲ ساله (۱۴۰۴ تا ۱۴۰۵)" },
+                    { id: "year1405", label: "سال مالی ۱۴۰۵" },
+                    { id: "year1404", label: "سال مالی ۱۴۰۴" },
+                    { id: "year1403", label: "سال مالی ۱۴۰۳" },
+                    { id: "spring1404", label: "بهار ۱۴۰۴" },
+                    { id: "summer1404", label: "تابستان ۱۴۰۴" },
+                    { id: "autumn1404", label: "پاییز ۱۴۰۴" },
+                    { id: "winter1404", label: "زمستان ۱۴۰۴" },
+                    { id: "spring1405", label: "بهار ۱۴۰۵" },
+                    { id: "summer1405", label: "تابستان ۱۴۰۵" },
+                    { id: "autumn1405", label: "پاییز ۱۴۰۵" },
+                    { id: "winter1405", label: "زمستان ۱۴۰۵" },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => handlePresetChange(p.id)}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                        taxPreset === p.id
+                          ? "bg-amber-600 text-white font-bold shadow-md shadow-amber-600/30 ring-1 ring-amber-400"
+                          : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-2">
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">از تاریخ (آغاز دوره مالیاتی):</label>
-                  <input
-                    type="date"
-                    value={taxStartDate}
-                    onChange={(e) => {
-                      setTaxPreset("custom");
-                      setTaxStartDate(e.target.value);
-                    }}
-                    className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
-                  />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">معادل شمسی: {toJalaliDate(taxStartDate)}</span>
+              {/* Custom Jalali Selection Inputs */}
+              <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4" />
+                    تنظیم بازه تاریخ شمسی دلخواه (مثلاً ۱۴۰۴ تا ۱۴۰۵):
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className="text-slate-400">انتخاب سال سریع:</span>
+                    <button
+                      onClick={() => handleApplyYearAndQuarter(1404, 1405, "full")}
+                      className="rounded-lg bg-slate-800 hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-200 border border-slate-700 transition"
+                    >
+                      ۱۴۰۴ تا ۱۴۰۵
+                    </button>
+                    <button
+                      onClick={() => handleApplyYearAndQuarter(1404, 1404, "full")}
+                      className="rounded-lg bg-slate-800 hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-200 border border-slate-700 transition"
+                    >
+                      کل ۱۴۰۴
+                    </button>
+                    <button
+                      onClick={() => handleApplyYearAndQuarter(1405, 1405, "full")}
+                      className="rounded-lg bg-slate-800 hover:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-200 border border-slate-700 transition"
+                    >
+                      کل ۱۴۰۵
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">تا تاریخ (پایان دوره مالیاتی):</label>
-                  <input
-                    type="date"
-                    value={taxEndDate}
-                    onChange={(e) => {
-                      setTaxPreset("custom");
-                      setTaxEndDate(e.target.value);
-                    }}
-                    className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
-                  />
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">معادل شمسی: {toJalaliDate(taxEndDate)}</span>
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                  <div>
+                    <label className="block text-[11px] text-slate-300 font-semibold mb-1">
+                      از تاریخ شمسی (آغاز دوره):
+                    </label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={taxJalaliStart}
+                      onChange={(e) => handleJalaliDateChange("start", e.target.value)}
+                      placeholder="1404/01/01"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3 py-2 text-xs font-mono font-bold text-amber-300 text-center focus:border-amber-500 focus:outline-none"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                      <span>میلادی: {taxStartDate}</span>
+                      <span>شمسی: {toJalaliDate(taxStartDate)}</span>
+                    </div>
+                  </div>
 
-                <div>
-                  <button
-                    onClick={() => fetchTaxDeclaration(taxStartDate, taxEndDate)}
-                    disabled={taxLoading}
-                    className="w-full rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${taxLoading ? "animate-spin text-amber-400" : ""}`} />
-                    محاسبه و دریافت اظهارنامه
-                  </button>
+                  <div>
+                    <label className="block text-[11px] text-slate-300 font-semibold mb-1">
+                      تا تاریخ شمسی (پایان دوره):
+                    </label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={taxJalaliEnd}
+                      onChange={(e) => handleJalaliDateChange("end", e.target.value)}
+                      placeholder="1405/12/29"
+                      className="w-full rounded-xl bg-slate-900 border border-slate-800 px-3 py-2 text-xs font-mono font-bold text-amber-300 text-center focus:border-amber-500 focus:outline-none"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                      <span>میلادی: {taxEndDate}</span>
+                      <span>شمسی: {toJalaliDate(taxEndDate)}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <button
+                      onClick={() => fetchTaxDeclaration(taxStartDate, taxEndDate)}
+                      disabled={taxLoading}
+                      className="w-full rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-600/20 py-2 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${taxLoading ? "animate-spin" : ""}`} />
+                      محاسبه و دریافت اظهارنامه
+                    </button>
+                    {taxDateError && (
+                      <span className="text-[10px] text-rose-400 mt-1 block text-center font-medium">
+                        {taxDateError}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

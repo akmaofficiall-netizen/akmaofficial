@@ -1,266 +1,439 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import crypto from "node:crypto";
-import { db } from "@/db";
-import * as schema from "@/db/schema";
-import { desc, eq, sql } from "drizzle-orm";
-import { logAuditEvent } from "./audit";
+import { db, pool } from "@/db";
+import {
+  backups,
+  systemSettings,
+  projects,
+  customers,
+  customerProjectMemberships,
+  customerHealthLogs,
+  customerAssignments,
+  employees,
+  employeeProjectMemberships,
+  roles,
+  permissions,
+  rolePermissions,
+  employeeAccounts,
+  employeeProjectAssignments,
+  projectCompensations,
+  projectTargets,
+  payrollRecords,
+  commissionRules,
+  commissionLedger,
+  suppliers,
+  rawMaterials,
+  rawMaterialPriceHistory,
+  products,
+  productRecipes,
+  projectProductPrices,
+  warehouses,
+  inventoryLedger,
+  purchases,
+  purchaseItems,
+  productionBatches,
+  productionBatchItems,
+  invoices,
+  invoiceItems,
+  accounts,
+  payments,
+  paymentAllocations,
+  expenses,
+  consignments,
+  consignmentItems,
+  alerts,
+  tasks,
+  auditLogs,
+} from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
+import crypto from "crypto";
+import { toJalaliDate } from "@/lib/dateUtils";
+import { logAuditEvent } from "@/services/audit";
 
-const BACKUP_TABLES = [
-  ["projects", schema.projects],
-  ["customers", schema.customers],
-  ["customerProjectMemberships", schema.customerProjectMemberships],
-  ["customerHealthLogs", schema.customerHealthLogs],
-  ["employees", schema.employees],
-  ["employeeProjectMemberships", schema.employeeProjectMemberships],
-  ["customerAssignments", schema.customerAssignments],
-  ["roles", schema.roles],
-  ["permissions", schema.permissions],
-  ["rolePermissions", schema.rolePermissions],
-  ["employeeAccounts", schema.employeeAccounts],
-  ["employeeProjectAssignments", schema.employeeProjectAssignments],
-  ["projectCompensations", schema.projectCompensations],
-  ["projectTargets", schema.projectTargets],
-  ["suppliers", schema.suppliers],
-  ["rawMaterials", schema.rawMaterials],
-  ["rawMaterialPriceHistory", schema.rawMaterialPriceHistory],
-  ["products", schema.products],
-  ["productRecipes", schema.productRecipes],
-  ["projectProductPrices", schema.projectProductPrices],
-  ["warehouses", schema.warehouses],
-  ["inventoryLedger", schema.inventoryLedger],
-  ["purchases", schema.purchases],
-  ["purchaseItems", schema.purchaseItems],
-  ["productionBatches", schema.productionBatches],
-  ["productionBatchItems", schema.productionBatchItems],
-  ["invoices", schema.invoices],
-  ["invoiceItems", schema.invoiceItems],
-  ["accounts", schema.accounts],
-  ["payments", schema.payments],
-  ["paymentAllocations", schema.paymentAllocations],
-  ["commissionRules", schema.commissionRules],
-  ["commissionLedger", schema.commissionLedger],
-  ["payrollRecords", schema.payrollRecords],
-  ["expenses", schema.expenses],
-  ["consignments", schema.consignments],
-  ["consignmentItems", schema.consignmentItems],
-  ["alerts", schema.alerts],
-  ["tasks", schema.tasks],
-  ["auditLogs", schema.auditLogs],
-  ["systemSettings", schema.systemSettings],
-] as const;
+export interface BackupPayload {
+  version: string;
+  system: string;
+  createdAt: string;
+  jalaliDate: string;
+  tables: {
+    systemSettings?: any[];
+    projects?: any[];
+    customers?: any[];
+    customerProjectMemberships?: any[];
+    customerHealthLogs?: any[];
+    customerAssignments?: any[];
+    employees?: any[];
+    employeeProjectMemberships?: any[];
+    roles?: any[];
+    permissions?: any[];
+    rolePermissions?: any[];
+    employeeAccounts?: any[];
+    employeeProjectAssignments?: any[];
+    projectCompensations?: any[];
+    projectTargets?: any[];
+    payrollRecords?: any[];
+    commissionRules?: any[];
+    commissionLedger?: any[];
+    suppliers?: any[];
+    rawMaterials?: any[];
+    rawMaterialPriceHistory?: any[];
+    products?: any[];
+    productRecipes?: any[];
+    projectProductPrices?: any[];
+    warehouses?: any[];
+    inventoryLedger?: any[];
+    purchases?: any[];
+    purchaseItems?: any[];
+    productionBatches?: any[];
+    productionBatchItems?: any[];
+    invoices?: any[];
+    invoiceItems?: any[];
+    accounts?: any[];
+    payments?: any[];
+    paymentAllocations?: any[];
+    expenses?: any[];
+    consignments?: any[];
+    consignmentItems?: any[];
+    alerts?: any[];
+    tasks?: any[];
+  };
+}
 
-export async function createFullSystemBackup() {
-  const data: Record<string, unknown> = {};
+export async function createSystemBackup(userId = "system_user", userName = "مدیر سیستم") {
+  const [
+    sysSettingsList,
+    projectsList,
+    customersList,
+    custProjList,
+    custHealthList,
+    custAssignList,
+    employeesList,
+    empProjList,
+    rolesList,
+    permList,
+    rolePermList,
+    empAccList,
+    empProjAssignList,
+    projCompList,
+    projTgtList,
+    payrollList,
+    commRulesList,
+    commLedgerList,
+    suppliersList,
+    rmList,
+    rmPriceList,
+    productsList,
+    recipesList,
+    projPricesList,
+    warehousesList,
+    invLedgerList,
+    purchasesList,
+    purchaseItemsList,
+    batchesList,
+    batchItemsList,
+    invoicesList,
+    invoiceItemsList,
+    accountsList,
+    paymentsList,
+    allocationsList,
+    expensesList,
+    consignmentsList,
+    consignmentItemsList,
+    alertsList,
+    tasksList,
+  ] = await Promise.all([
+    db.select().from(systemSettings),
+    db.select().from(projects),
+    db.select().from(customers),
+    db.select().from(customerProjectMemberships),
+    db.select().from(customerHealthLogs),
+    db.select().from(customerAssignments),
+    db.select().from(employees),
+    db.select().from(employeeProjectMemberships),
+    db.select().from(roles),
+    db.select().from(permissions),
+    db.select().from(rolePermissions),
+    db.select().from(employeeAccounts),
+    db.select().from(employeeProjectAssignments),
+    db.select().from(projectCompensations),
+    db.select().from(projectTargets),
+    db.select().from(payrollRecords),
+    db.select().from(commissionRules),
+    db.select().from(commissionLedger),
+    db.select().from(suppliers),
+    db.select().from(rawMaterials),
+    db.select().from(rawMaterialPriceHistory),
+    db.select().from(products),
+    db.select().from(productRecipes),
+    db.select().from(projectProductPrices),
+    db.select().from(warehouses),
+    db.select().from(inventoryLedger),
+    db.select().from(purchases),
+    db.select().from(purchaseItems),
+    db.select().from(productionBatches),
+    db.select().from(productionBatchItems),
+    db.select().from(invoices),
+    db.select().from(invoiceItems),
+    db.select().from(accounts),
+    db.select().from(payments),
+    db.select().from(paymentAllocations),
+    db.select().from(expenses),
+    db.select().from(consignments),
+    db.select().from(consignmentItems),
+    db.select().from(alerts),
+    db.select().from(tasks),
+  ]);
 
-  for (const [name, table] of BACKUP_TABLES) {
-    try {
-      data[name] = await db.select().from(table as any);
-    } catch (e: any) {
-      console.warn(`Skipping table ${name} during backup query:`, e.message);
-      data[name] = [];
-    }
-  }
-
-  const dump = {
-    version: "3.5.0",
-    timestamp: new Date().toISOString(),
-    database: "akma",
-    data,
+  const now = new Date();
+  const payload: BackupPayload = {
+    version: "2.0",
+    system: "Hekmat Akma ERP",
+    createdAt: now.toISOString(),
+    jalaliDate: toJalaliDate(now, { showTime: true }),
+    tables: {
+      systemSettings: sysSettingsList,
+      projects: projectsList,
+      customers: customersList,
+      customerProjectMemberships: custProjList,
+      customerHealthLogs: custHealthList,
+      customerAssignments: custAssignList,
+      employees: employeesList,
+      employeeProjectMemberships: empProjList,
+      roles: rolesList,
+      permissions: permList,
+      rolePermissions: rolePermList,
+      employeeAccounts: empAccList,
+      employeeProjectAssignments: empProjAssignList,
+      projectCompensations: projCompList,
+      projectTargets: projTgtList,
+      payrollRecords: payrollList,
+      commissionRules: commRulesList,
+      commissionLedger: commLedgerList,
+      suppliers: suppliersList,
+      rawMaterials: rmList,
+      rawMaterialPriceHistory: rmPriceList,
+      products: productsList,
+      productRecipes: recipesList,
+      projectProductPrices: projPricesList,
+      warehouses: warehousesList,
+      inventoryLedger: invLedgerList,
+      purchases: purchasesList,
+      purchaseItems: purchaseItemsList,
+      productionBatches: batchesList,
+      productionBatchItems: batchItemsList,
+      invoices: invoicesList,
+      invoiceItems: invoiceItemsList,
+      accounts: accountsList,
+      payments: paymentsList,
+      paymentAllocations: allocationsList,
+      expenses: expensesList,
+      consignments: consignmentsList,
+      consignmentItems: consignmentItemsList,
+      alerts: alertsList,
+      tasks: tasksList,
+    },
   };
 
-  const jsonString = JSON.stringify(dump);
-  const buffer = Buffer.from(jsonString, "utf8");
-  const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
-  const filename = `backup_akma_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  const jsonString = JSON.stringify(payload, null, 2);
+  const sizeBytes = Buffer.byteLength(jsonString, "utf8");
+  const checksum = crypto.createHash("sha256").update(jsonString).digest("hex");
 
-  const backupDir = process.env.BACKUP_DIR || path.resolve(process.cwd(), "backups");
-  let storagePath: string | null = null;
-  try {
-    await fs.mkdir(backupDir, { recursive: true });
-    storagePath = path.join(backupDir, filename);
-    await fs.writeFile(storagePath, buffer);
-  } catch (error) {
-    console.warn("Local disk backup file storage unavailable; keeping snapshot in database:", error);
-  }
+  const timestampStr = now.toISOString().replace(/[:.]/g, "-");
+  const filename = `akma_backup_${timestampStr}.json`;
 
-  const [record] = await db
-    .insert(schema.backups)
+  const [newBackup] = await db
+    .insert(backups)
     .values({
       filename,
-      sizeBytes: buffer.byteLength,
+      sizeBytes,
       checksum,
       status: "completed",
-      backupData: dump as any,
+      backupData: payload as any,
     })
     .returning();
 
-  try {
-    await logAuditEvent("BACKUP", "system", record.id, {
+  await logAuditEvent(
+    "BACKUP",
+    "database",
+    newBackup.id,
+    {
       filename,
-      sizeBytes: buffer.byteLength,
+      sizeBytes,
       checksum,
-      storagePath,
-    });
-  } catch (e) {
-    console.warn("Audit log error on backup:", e);
-  }
+    },
+    { userId, userName }
+  );
 
-  return { ...record, storagePath };
+  return {
+    ...newBackup,
+    backupData: undefined, // keep response light
+  };
 }
 
 export async function getBackupsList() {
-  return db
+  return await db
     .select({
-      id: schema.backups.id,
-      filename: schema.backups.filename,
-      sizeBytes: schema.backups.sizeBytes,
-      checksum: schema.backups.checksum,
-      status: schema.backups.status,
-      createdAt: schema.backups.createdAt,
+      id: backups.id,
+      filename: backups.filename,
+      sizeBytes: backups.sizeBytes,
+      checksum: backups.checksum,
+      status: backups.status,
+      createdAt: backups.createdAt,
     })
-    .from(schema.backups)
-    .orderBy(desc(schema.backups.createdAt));
+    .from(backups)
+    .orderBy(desc(backups.createdAt));
 }
 
 export async function getBackupById(id: string) {
-  const [record] = await db.select().from(schema.backups).where(eq(schema.backups.id, id)).limit(1);
-  return record;
+  const [backup] = await db.select().from(backups).where(eq(backups.id, id)).limit(1);
+  return backup || null;
 }
 
-function sanitizeRowForTable(table: any, row: Record<string, any>): Record<string, any> {
-  const clean: Record<string, any> = {};
-  for (const [key, val] of Object.entries(row)) {
-    if (val === undefined) continue;
-
-    const col = table[key];
-    const isDateCol =
-      col &&
-      (col.dataType === "date" ||
-        col.columnType === "PgTimestamp" ||
-        col.columnType === "PgDate");
-
-    if (isDateCol) {
-      if (val === null || val === "") {
-        clean[key] = null;
-      } else if (val instanceof Date) {
-        clean[key] = val;
-      } else {
-        const parsed = new Date(val as string | number);
-        clean[key] = isNaN(parsed.getTime()) ? null : parsed;
-      }
-    } else {
-      clean[key] = val;
-    }
-  }
-  return clean;
-}
-
-export async function restoreFullSystemBackup(dump: any) {
-  if (!dump || !dump.data || typeof dump.data !== "object") {
-    throw new Error("فرمت فایل پشتیبان نامعتبر است (ساختار data یا جداول یافت نشد).");
+export async function restoreBackupPayload(payload: any, userId = "system_user", userName = "مدیر سیستم") {
+  if (!payload || typeof payload !== "object" || !payload.tables) {
+    throw new Error("ساختار فایل پشتیبان نامعتبر است (بخش tables یافت نشد).");
   }
 
-  const { data } = dump;
-  const restoredStats: Record<string, number> = {};
+  const tables = payload.tables;
+  const stats: Record<string, number> = {};
 
-  const tableNames = [
-    "audit_logs",
-    "tasks",
-    "alerts",
-    "consignment_items",
-    "consignments",
-    "expenses",
-    "payroll_records",
-    "commission_ledger",
-    "commission_rules",
-    "payment_allocations",
-    "payments",
-    "accounts",
-    "invoice_items",
-    "invoices",
-    "production_batch_items",
-    "production_batches",
-    "purchase_items",
-    "purchases",
-    "inventory_ledger",
-    "warehouses",
-    "project_product_prices",
-    "product_recipes",
-    "products",
-    "raw_material_price_history",
-    "raw_materials",
-    "suppliers",
-    "project_targets",
-    "project_compensations",
-    "employee_project_assignments",
-    "employee_accounts",
-    "role_permissions",
-    "permissions",
-    "roles",
-    "customer_assignments",
-    "employee_project_memberships",
-    "employees",
-    "customer_health_logs",
-    "customer_project_memberships",
-    "customers",
-    "projects",
-    "system_settings",
-  ];
-
-  // 1. Truncate all tables cleanly with CASCADE
+  // Execute restore within single client connection transaction
+  const client = await pool.connect();
   try {
-    const truncateSql = `TRUNCATE ${tableNames.map((t) => `"${t}"`).join(", ")} CASCADE;`;
-    await db.execute(sql.raw(truncateSql));
-  } catch (e: any) {
-    console.warn("Truncate cascade warning, falling back to individual deletes:", e.message);
-    const reverseTables = [...BACKUP_TABLES].reverse();
-    for (const [name, table] of reverseTables) {
-      try {
-        await db.delete(table as any);
-      } catch (err: any) {
-        console.warn(`Table wipe note on ${name}:`, err.message);
-      }
-    }
-  }
+    await client.query("BEGIN");
 
-  // 2. Insert records in forward order (parents first)
-  for (const [name, table] of BACKUP_TABLES) {
-    const rows = data[name];
-    if (Array.isArray(rows) && rows.length > 0) {
-      const chunkSize = 50;
+    // Clear existing operational data in reverse dependency order
+    const tableNamesInClearOrder = [
+      "production_batch_items",
+      "production_batches",
+      "consignment_items",
+      "consignments",
+      "payment_allocations",
+      "payments",
+      "invoice_items",
+      "invoices",
+      "inventory_ledger",
+      "purchase_items",
+      "purchases",
+      "product_recipes",
+      "project_product_prices",
+      "raw_material_price_history",
+      "products",
+      "raw_materials",
+      "suppliers",
+      "warehouses",
+      "expenses",
+      "accounts",
+      "customer_health_logs",
+      "customer_assignments",
+      "customer_project_memberships",
+      "customers",
+      "payroll_records",
+      "commission_ledger",
+      "commission_rules",
+      "project_targets",
+      "project_compensations",
+      "employee_project_assignments",
+      "employee_accounts",
+      "role_permissions",
+      "permissions",
+      "roles",
+      "employee_project_memberships",
+      "tasks",
+      "alerts",
+      "employees",
+      "projects",
+      "system_settings",
+    ];
+
+    for (const tbl of tableNamesInClearOrder) {
+      await client.query(`TRUNCATE TABLE "${tbl}" CASCADE`);
+    }
+
+    // Helper to batch insert raw records
+    const insertTable = async (tableName: string, rows?: any[]) => {
+      if (!rows || !Array.isArray(rows) || rows.length === 0) return 0;
       let count = 0;
-      for (let i = 0; i < rows.length; i += chunkSize) {
-        const chunk = rows.slice(i, i + chunkSize);
-        const sanitizedChunk = chunk.map((r) => sanitizeRowForTable(table, r));
-        await db.insert(table as any).values(sanitizedChunk).onConflictDoNothing();
-        count += sanitizedChunk.length;
+      for (const row of rows) {
+        const keys = Object.keys(row);
+        if (keys.length === 0) continue;
+        const cols = keys.map((k) => {
+          // Convert camelCase to snake_case for DB columns
+          return `"${k.replace(/([A-Z])/g, "_$1").toLowerCase()}"`;
+        }).join(", ");
+        const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+        const values = keys.map((k) => {
+          const v = row[k];
+          if (v !== null && typeof v === "object" && !(v instanceof Date)) {
+            return JSON.stringify(v);
+          }
+          return v;
+        });
+        const query = `INSERT INTO "${tableName}" (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`;
+        await client.query(query, values);
+        count++;
       }
-      restoredStats[name] = count;
-    } else {
-      restoredStats[name] = 0;
-    }
-  }
+      return count;
+    };
 
-  try {
-    await logAuditEvent("RESTORE", "system", "all", {
-      timestamp: new Date().toISOString(),
-      restoredTables: Object.keys(restoredStats).length,
-    });
-  } catch (e) {
-    console.warn("Audit log error on restore:", e);
-  }
+    stats.system_settings = await insertTable("system_settings", tables.systemSettings);
+    stats.projects = await insertTable("projects", tables.projects);
+    stats.roles = await insertTable("roles", tables.roles);
+    stats.permissions = await insertTable("permissions", tables.permissions);
+    stats.role_permissions = await insertTable("role_permissions", tables.rolePermissions);
+    stats.employees = await insertTable("employees", tables.employees);
+    stats.employee_accounts = await insertTable("employee_accounts", tables.employeeAccounts);
+    stats.employee_project_memberships = await insertTable("employee_project_memberships", tables.employeeProjectMemberships);
+    stats.employee_project_assignments = await insertTable("employee_project_assignments", tables.employeeProjectAssignments);
+    stats.project_compensations = await insertTable("project_compensations", tables.projectCompensations);
+    stats.project_targets = await insertTable("project_targets", tables.projectTargets);
+    stats.customers = await insertTable("customers", tables.customers);
+    stats.customer_project_memberships = await insertTable("customer_project_memberships", tables.customerProjectMemberships);
+    stats.customer_assignments = await insertTable("customer_assignments", tables.customerAssignments);
+    stats.customer_health_logs = await insertTable("customer_health_logs", tables.customerHealthLogs);
+    stats.accounts = await insertTable("accounts", tables.accounts);
+    stats.suppliers = await insertTable("suppliers", tables.suppliers);
+    stats.warehouses = await insertTable("warehouses", tables.warehouses);
+    stats.raw_materials = await insertTable("raw_materials", tables.rawMaterials);
+    stats.raw_material_price_history = await insertTable("raw_material_price_history", tables.rawMaterialPriceHistory);
+    stats.products = await insertTable("products", tables.products);
+    stats.product_recipes = await insertTable("product_recipes", tables.productRecipes);
+    stats.project_product_prices = await insertTable("project_product_prices", tables.projectProductPrices);
+    stats.purchases = await insertTable("purchases", tables.purchases);
+    stats.purchase_items = await insertTable("purchase_items", tables.purchaseItems);
+    stats.invoices = await insertTable("invoices", tables.invoices);
+    stats.invoice_items = await insertTable("invoice_items", tables.invoiceItems);
+    stats.payments = await insertTable("payments", tables.payments);
+    stats.payment_allocations = await insertTable("payment_allocations", tables.paymentAllocations);
+    stats.expenses = await insertTable("expenses", tables.expenses);
+    stats.production_batches = await insertTable("production_batches", tables.productionBatches);
+    stats.production_batch_items = await insertTable("production_batch_items", tables.productionBatchItems);
+    stats.inventory_ledger = await insertTable("inventory_ledger", tables.inventoryLedger);
+    stats.consignments = await insertTable("consignments", tables.consignments);
+    stats.consignment_items = await insertTable("consignment_items", tables.consignmentItems);
+    stats.commission_rules = await insertTable("commission_rules", tables.commissionRules);
+    stats.payroll_records = await insertTable("payroll_records", tables.payrollRecords);
+    stats.commission_ledger = await insertTable("commission_ledger", tables.commissionLedger);
+    stats.alerts = await insertTable("alerts", tables.alerts);
+    stats.tasks = await insertTable("tasks", tables.tasks);
 
-  return { success: true, restoredStats };
+    await client.query("COMMIT");
+
+    await logAuditEvent(
+      "RESTORE",
+      "database",
+      null,
+      {
+        tablesRestored: stats,
+        originalCreatedAt: payload.createdAt,
+      },
+      { userId, userName }
+    );
+
+    return stats;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
-export async function restoreBackupById(id: string) {
-  const backup = await getBackupById(id);
-  if (!backup) {
-    throw new Error("پشتیبان مورد نظر یافت نشد.");
-  }
-  if (!backup.backupData) {
-    throw new Error("داده‌های پشتیبان در رکورد این فایل موجود نمی‌باشد.");
-  }
-  return restoreFullSystemBackup(backup.backupData);
-}
