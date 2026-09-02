@@ -259,6 +259,7 @@ export const products = pgTable("products", {
   unit: text("unit").default("عدد").notNull(),
   packQuantity: integer("pack_quantity").default(1),
   imageUrl: text("image_url"),
+  description: text("description"),
   basePrice: numeric("base_price", { precision: 15, scale: 2 }).default("0").notNull(),
   calculatedCost: numeric("calculated_cost", { precision: 15, scale: 2 }).default("0").notNull(), // calculated from BOM
   stockQuantity: numeric("stock_quantity", { precision: 15, scale: 4 }).default("0").notNull(),
@@ -268,6 +269,32 @@ export const products = pgTable("products", {
   status: text("status").default("active").notNull(), // active, inactive
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Special Products Module (محصولات اختصاصی)
+export const specialProducts = pgTable("special_products", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(), // e.g. SPC-0001
+  name: text("name").notNull(),
+  category: text("category").default("اختصاصی").notNull(),
+  unit: text("unit").default("عدد").notNull(), // عدد, لیتر, کیلوگرم, متر, بسته, ...
+  imageUrl: text("image_url"),
+  description: text("description"),
+  basePrice: numeric("base_price", { precision: 15, scale: 2 }).default("0"),
+  stockQuantity: numeric("stock_quantity", { precision: 15, scale: 4 }).default("0"),
+  minStockQuantity: numeric("min_stock_quantity", { precision: 15, scale: 4 }).default("0"),
+  status: text("status").default("active").notNull(), // active, inactive
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Code Sequences for Monotonic Unique Identifiers (PRD-0001, SPC-0001)
+export const codeSequences = pgTable("code_sequences", {
+  id: text("id").primaryKey(), // 'product', 'special_product'
+  lastValue: integer("last_value").default(0).notNull(),
+  prefix: text("prefix").notNull(), // 'PRD-', 'SPC-'
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

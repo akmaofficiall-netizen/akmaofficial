@@ -346,9 +346,22 @@ export function formatRial(amountInToman: number | string | null | undefined): s
   return `${new Intl.NumberFormat("fa-IR").format(rial)} ریال`;
 }
 
-export function formatNumber(amount: number | string | null | undefined): string {
-  const num = Number(amount) || 0;
-  return new Intl.NumberFormat("fa-IR").format(num);
+export function formatNumber(amount: number | string | null | undefined, maxDecimals: number = 4): string {
+  if (amount === null || amount === undefined || amount === "") return "۰";
+  const num = Number(amount);
+  if (isNaN(num)) return "۰";
+  return new Intl.NumberFormat("fa-IR", {
+    maximumFractionDigits: maxDecimals,
+  }).format(num);
+}
+
+export function formatQuantity(
+  amount: number | string | null | undefined,
+  unit?: string | null,
+  maxDecimals: number = 4
+): string {
+  const formatted = formatNumber(amount, maxDecimals);
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 export function getCurrentJalaliDate(): string {

@@ -5,6 +5,7 @@ import { desc, eq, and } from "drizzle-orm";
 import { updateProductCostFromBOM } from "@/services/pricing";
 import { logAuditEvent } from "@/services/audit";
 import { requirePermission } from "@/services/access";
+import { getNextSequenceCode } from "@/services/sequence";
 
 export async function GET(req: Request) {
   try {
@@ -132,24 +133,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "قیمت پروژه با موفقیت به روز شد." });
     }
 
-    if (!body.name || !body.code || body.basePrice === undefined) {
+    if (!body.name || body.basePrice === undefined) {
       return NextResponse.json(
-        { success: false, error: "کد، نام و قیمت پایه محصول الزامی است." },
+        { success: false, error: "نام و قیمت پایه محصول الزامی است." },
         { status: 400 }
       );
+    }
+
+    let code = body.code?.trim();
+    if (!code) {
+      code = await getNextSequenceCode("product");
     }
 
     const [created] = await db
       .insert(products)
       .values({
-        code: body.code,
-        name: body.name,
+        code,
+        name: body.name.trim(),
         category: body.category || "عمومی",
         unit: body.unit || "عدد",
-        basePrice: body.basePrice.toString(),
+        imageUrl: body.imageUrl?.trim() || null,
+        description: body.description?.trim() || null,
+        basePrice: Math.max(0, Number(body.basePrice) || 0).toString(),
         calculatedCost: body.calculatedCost ? body.calculatedCost.toString() : "0",
-        stockQuantity: body.stockQuantity ? body.stockQuantity.toString() : "0",
-        minStockQuantity: body.minStockQuantity ? body.minStockQuantity.toString() : "5",
+        stockQuantity: body.stockQuantity ? Math.max(0, Number(body.stockQuantity) || 0).toString() : "0",
+        minStockQuantity: body.minStockQuantity ? Math.max(0, Number(body.minStockQuantity) || 0).toString() : "5",
         status: body.status || "active",
       })
       .returning();

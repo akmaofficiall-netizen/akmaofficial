@@ -24,7 +24,8 @@ import {
   X,
   Menu,
   ChevronDown,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Sparkles,
 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -95,6 +96,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     { id: "invoices", label: "فروش و فاکتورها", icon: ShoppingBag },
     { id: "raw_materials", label: "مواد اولیه و قطعات", icon: Package },
     { id: "products", label: "محصولات و BOM", icon: Layers },
+    { id: "special_products", label: "محصولات اختصاصی", icon: Sparkles },
     { id: "production", label: "بچ‌های تولید", icon: Factory },
     { id: "inventory", label: "انبار و موجودی", icon: Layers },
     { id: "customers", label: "مشتریان و CRM", icon: Users },
@@ -112,7 +114,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   ];
 
   const permissionByTab: Record<string, string> = {
-    invoices: "invoices.view", raw_materials: "raw_materials.view", products: "products.view", production: "production.view",
+    invoices: "invoices.view", raw_materials: "raw_materials.view", products: "products.view", special_products: "products.view", production: "production.view",
     inventory: "inventory.view", customers: "customers.view", customer_map: "customers.view", purchases: "purchases.view",
     financial: "financial.view", employees: "employees.view", projects: "projects.view", reports: "reports.view",
     tax_declaration: "reports.view",

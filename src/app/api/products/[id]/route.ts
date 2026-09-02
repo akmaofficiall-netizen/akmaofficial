@@ -66,12 +66,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const updateData: any = {
       name: body.name,
-      code: body.code,
       category: body.category,
       unit: body.unit,
+      description: body.description !== undefined ? body.description : undefined,
+      imageUrl: body.imageUrl !== undefined ? body.imageUrl : undefined,
       updatedAt: new Date(),
     };
 
+    if (body.code) updateData.code = body.code;
     if (body.basePrice !== undefined) updateData.basePrice = body.basePrice.toString();
     if (body.stockQuantity !== undefined) updateData.stockQuantity = body.stockQuantity.toString();
     if (body.minStockQuantity !== undefined) updateData.minStockQuantity = body.minStockQuantity.toString();
@@ -99,6 +101,28 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     await logAuditEvent("UPDATE", "product", id, { name: updated.name });
     return NextResponse.json({ success: true, product: updated });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requirePermission("products.delete");
+    const { id } = await params;
+
+    const [existing] = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "محصول یافت نشد." }, { status: 404 });
+    }
+
+    await db.delete(products).where(eq(products.id, id));
+
+    await logAuditEvent("DELETE", "product", id, { code: existing.code, name: existing.name });
+    return NextResponse.json({
+      success: true,
+      message: `محصول «${existing.name}» (${existing.code}) با موفقیت حذف شد.`,
+    });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

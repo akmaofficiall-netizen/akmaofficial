@@ -1029,6 +1029,53 @@ export async function migrateDatabase() {
     ALTER TABLE customers ALTER COLUMN latitude DROP DEFAULT;
     ALTER TABLE customers ALTER COLUMN longitude DROP DEFAULT;
 
+    CREATE TABLE IF NOT EXISTS special_products (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      category TEXT DEFAULT 'اختصاصی' NOT NULL,
+      unit TEXT DEFAULT 'عدد' NOT NULL,
+      image_url TEXT,
+      description TEXT,
+      base_price NUMERIC(15,2) DEFAULT 0,
+      stock_quantity NUMERIC(15,4) DEFAULT 0,
+      min_stock_quantity NUMERIC(15,4) DEFAULT 0,
+      status TEXT DEFAULT 'active' NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS code_sequences (
+      id TEXT PRIMARY KEY,
+      last_value INTEGER DEFAULT 0 NOT NULL,
+      prefix TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+
+    INSERT INTO code_sequences (id, last_value, prefix)
+    VALUES 
+      ('product', 0, 'PRD-'),
+      ('special_product', 0, 'SPC-')
+    ON CONFLICT (id) DO NOTHING;
+
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS pack_quantity INTEGER DEFAULT 1;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS target_stock_quantity NUMERIC(15,4) DEFAULT 50;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS commission_rate_percent NUMERIC(5,2) DEFAULT 5;
+
+    ALTER TABLE special_products ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE special_products ADD COLUMN IF NOT EXISTS image_url TEXT;
+    ALTER TABLE special_products ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE special_products ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
+    CREATE INDEX IF NOT EXISTS idx_special_products_status ON special_products(status);
+    CREATE INDEX IF NOT EXISTS idx_special_products_category ON special_products(category);
+    CREATE INDEX IF NOT EXISTS idx_special_products_code ON special_products(code);
+
+    CREATE INDEX IF NOT EXISTS idx_products_code ON products(code);
+
     -- Default Accounts Seeding
     INSERT INTO accounts (code, name, type, bank_name, account_number, balance, is_default)
     VALUES

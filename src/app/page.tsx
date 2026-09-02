@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { DashboardView } from "@/components/views/DashboardView";
 import { RawMaterialsView } from "@/components/views/RawMaterialsView";
 import { ProductsView } from "@/components/views/ProductsView";
+import { SpecialProductsView } from "@/components/views/SpecialProductsView";
 import { InvoicesView } from "@/components/views/InvoicesView";
 import { CustomersView } from "@/components/views/CustomersView";
 import { CustomerMapView } from "@/components/views/CustomerMapView";
@@ -37,6 +38,8 @@ export default function HomePage() {
         return <RawMaterialsView />;
       case "products":
         return <ProductsView />;
+      case "special_products":
+        return <SpecialProductsView />;
       case "invoices":
         return <InvoicesView selectedProjectId={selectedProjectId} />;
       case "customers":

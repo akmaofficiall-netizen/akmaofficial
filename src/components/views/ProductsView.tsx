@@ -15,8 +15,12 @@ import {
   CheckCircle,
   X,
   AlertTriangle,
-  Sliders
+  Sliders,
+  Trash2,
 } from "lucide-react";
+import { formatMoney, formatNumber, formatQuantity, toJalaliDate } from "@/lib/dateUtils";
+
+const UNIT_OPTIONS = ["عدد", "لیتر", "کیلوگرم", "گرم", "متر", "بسته", "کارتن", "قوطی", "بطری", "متر مربع", "دستگاه", "طاقه", "رول"];
 
 export const ProductsView: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]);
@@ -72,7 +76,7 @@ export const ProductsView: React.FC = () => {
 
   const openAddModal = () => {
     setFormData({
-      code: `PRD-${Math.floor(100 + Math.random() * 900)}`,
+      code: "",
       name: "",
       category: "عمومی",
       unit: "عدد",
@@ -84,10 +88,26 @@ export const ProductsView: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
+  const handleDeleteProduct = async (p: any) => {
+    if (!window.confirm(`آیا از حذف محصول «${p.name}» با کد «${p.code}» مطمئن هستید؟`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/products/${p.id}`, { method: "DELETE" }).then((r) => r.json());
+      if (res.success) {
+        fetchData();
+      } else {
+        alert(res.error || "خطا در حذف محصول");
+      }
+    } catch (err: any) {
+      alert(err.message || "خطا در برقراری ارتباط با سرور");
+    }
+  };
+
   const handleSaveAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.code || formData.basePrice <= 0) {
-      alert("کد، نام و قیمت پایه محصول الزامی است.");
+    if (!formData.name || formData.basePrice <= 0) {
+      alert("نام و قیمت پایه محصول الزامی است.");
       return;
     }
 
@@ -292,34 +312,36 @@ export const ProductsView: React.FC = () => {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="font-mono text-[10px] text-slate-400 font-bold">{p.code}</span>
-                  <h3 className="text-base font-bold text-white mt-0.5">{p.name}</h3>
+                  <span className="font-mono text-[10px] text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                    {p.code}
+                  </span>
+                  <h3 className="text-base font-bold text-white mt-1">{p.name}</h3>
                   <p className="text-xs text-slate-400">دسته: {p.category}</p>
                 </div>
-                <NeonBadge variant={p.stockQuantity > p.minStockQuantity ? "green" : "yellow"}>
-                  موجودی: {p.stockQuantity} {p.unit}
+                <NeonBadge variant={Number(p.stockQuantity) > Number(p.minStockQuantity) ? "green" : "yellow"}>
+                  موجودی: {formatQuantity(p.stockQuantity, p.unit)}
                 </NeonBadge>
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-300">
                   <span>قیمت پایه فروش:</span>
-                  <span className="font-bold text-emerald-400">{p.basePrice.toLocaleString("fa-IR")} تومان</span>
+                  <span className="font-bold text-emerald-400 font-mono">{formatMoney(p.basePrice)}</span>
                 </div>
                 <div className="flex justify-between text-slate-400">
                   <span>بهای تمام شده (BOM):</span>
-                  <span className="font-semibold text-slate-300">{p.calculatedCost.toLocaleString("fa-IR")} تومان</span>
+                  <span className="font-semibold text-slate-300 font-mono">{formatMoney(p.calculatedCost)}</span>
                 </div>
                 <div className="flex justify-between text-slate-400 pt-1 border-t border-slate-800">
                   <span>حاشیه سود درصد:</span>
-                  <span className={`font-bold ${margin >= 20 ? "text-emerald-400" : "text-amber-400"}`}>{margin}%</span>
+                  <span className={`font-bold font-mono ${margin >= 20 ? "text-emerald-400" : "text-amber-400"}`}>{margin}%</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2 gap-2">
+              <div className="flex items-center justify-between pt-2 gap-1.5 flex-wrap">
                 <button
                   onClick={() => openEditProduct(p)}
-                  className="flex items-center gap-1.5 rounded-xl bg-cyan-600/15 border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-600/25 transition-all"
+                  className="flex items-center gap-1.5 rounded-xl bg-cyan-600/15 border border-cyan-500/30 px-2.5 py-1.5 text-xs font-semibold text-cyan-300 hover:bg-cyan-600/25 transition-all cursor-pointer"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
                   ویرایش و BOM
@@ -331,10 +353,10 @@ export const ProductsView: React.FC = () => {
                     setAdjustReason("");
                   }}
                   title="تعدیل دستی موجودی"
-                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600/15 border border-emerald-500/30 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/25 transition-all"
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600/15 border border-emerald-500/30 px-2 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/25 transition-all cursor-pointer"
                 >
                   <Sliders className="h-3.5 w-3.5" />
-                  تعدیل موجودی
+                  تعدیل
                 </button>
                 <button
                   onClick={() => {
@@ -342,10 +364,17 @@ export const ProductsView: React.FC = () => {
                     setSelectedProjectId(projects[0]?.id || "");
                     setCustomPrice(p.basePrice);
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600/20 border border-blue-500/30 px-2.5 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 transition-all"
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600/20 border border-blue-500/30 px-2 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 transition-all cursor-pointer"
                 >
                   <Folder className="h-3.5 w-3.5" />
                   قیمت پروژه
+                </button>
+                <button
+                  onClick={() => handleDeleteProduct(p)}
+                  className="p-1.5 rounded-xl bg-rose-950/40 text-rose-400 border border-rose-500/20 hover:bg-rose-900/50 hover:text-rose-200 transition-all cursor-pointer"
+                  title="حذف محصول"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -370,13 +399,13 @@ export const ProductsView: React.FC = () => {
             <form onSubmit={handleSaveAdd} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">کد محصول *</label>
+                  <label className="block text-slate-400 mb-1">کد محصول (خالی = صدور خودکار PRD-XXXX)</label>
                   <input
                     type="text"
-                    required
+                    placeholder="صدور خودکار سیستمی"
                     value={formData.code}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono placeholder-slate-600"
                   />
                 </div>
                 <div>
@@ -403,13 +432,18 @@ export const ProductsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">واحد فروش</label>
-                  <input
-                    type="text"
+                  <label className="block text-slate-400 mb-1">واحد سنجش</label>
+                  <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white"
-                  />
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white cursor-pointer"
+                  >
+                    {UNIT_OPTIONS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-400 mb-1">قیمت پایه *</label>
@@ -424,11 +458,13 @@ export const ProductsView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">موجودی اولیه در انبار</label>
+                  <label className="block text-slate-400 mb-1">موجودی اولیه در انبار (اعشار مجاز)</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     value={formData.stockQuantity}
-                    onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, stockQuantity: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
                   />
                 </div>
@@ -436,8 +472,10 @@ export const ProductsView: React.FC = () => {
                   <label className="block text-slate-400 mb-1">حداقل موجودی هشدار</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     value={formData.minStockQuantity}
-                    onChange={(e) => setFormData({ ...formData, minStockQuantity: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, minStockQuantity: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5 text-white font-mono"
                   />
                 </div>
@@ -564,13 +602,18 @@ export const ProductsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">واحد فروش</label>
-                  <input
+                  <label className="block text-slate-400 mb-1">واحد سنجش</label>
+                  <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    placeholder="واحد"
-                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white"
-                  />
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white cursor-pointer"
+                  >
+                    {UNIT_OPTIONS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-400 mb-1">قیمت پایه *</label>
@@ -588,8 +631,10 @@ export const ProductsView: React.FC = () => {
                   <label className="block text-slate-400 mb-1">موجودی فعلی در انبار ({formData.unit})</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     value={formData.stockQuantity}
-                    onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, stockQuantity: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-mono text-emerald-300 font-bold"
                   />
                 </div>
@@ -597,8 +642,10 @@ export const ProductsView: React.FC = () => {
                   <label className="block text-slate-400 mb-1">حداقل موجودی هشدار</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     value={formData.minStockQuantity}
-                    onChange={(e) => setFormData({ ...formData, minStockQuantity: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, minStockQuantity: parseFloat(e.target.value) || 0 })}
                     className="w-full rounded-xl bg-slate-950 border border-slate-700 p-2.5 text-white font-mono text-amber-300"
                   />
                 </div>
@@ -696,8 +743,8 @@ export const ProductsView: React.FC = () => {
               </p>
               <p className="text-slate-400">
                 موجودی فعلی در سیستم:{" "}
-                <span className="font-bold text-emerald-400">
-                  {adjustingProduct.stockQuantity} {adjustingProduct.unit}
+                <span className="font-bold text-emerald-400 font-mono">
+                  {formatQuantity(adjustingProduct.stockQuantity, adjustingProduct.unit)}
                 </span>
               </p>
             </div>
@@ -707,9 +754,11 @@ export const ProductsView: React.FC = () => {
                 <label className="block text-slate-400 mb-1">مقدار جدید موجودی ({adjustingProduct.unit}) *</label>
                 <input
                   type="number"
+                  step="any"
+                  min="0"
                   required
                   value={adjustQty}
-                  onChange={(e) => setAdjustQty(Number(e.target.value))}
+                  onChange={(e) => setAdjustQty(parseFloat(e.target.value) || 0)}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white font-mono text-base font-bold text-emerald-400"
                 />
               </div>
