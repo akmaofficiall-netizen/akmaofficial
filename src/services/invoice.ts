@@ -103,15 +103,34 @@ export async function createInvoice(input: CreateInvoiceInput) {
       }
       const disc = Number(itemInput.discountAmount || 0);
 
-      // Check if item is a Special Product (from specialProducts table)
+      // Check if item is a Special Product (from specialProducts table or products table with isSpecial = true)
       let specialProd = null;
       if (itemInput.specialProductId || itemInput.productType === "special_product") {
         const [sp] = await tx
           .select()
           .from(specialProducts)
           .where(eq(specialProducts.id, itemInput.specialProductId || itemInput.productId!))
-          .limit(1);
-        specialProd = sp || null;
+          .limit(1)
+          .catch(() => []);
+        if (sp) {
+          specialProd = sp;
+        } else {
+          const [p] = await tx
+            .select()
+            .from(products)
+            .where(and(eq(products.id, itemInput.specialProductId || itemInput.productId!), eq(products.isSpecial, true)))
+            .limit(1);
+          if (p) {
+            specialProd = {
+              id: p.id,
+              name: p.name,
+              code: p.code,
+              unit: p.unit,
+              basePrice: p.basePrice,
+              stockQuantity: p.stockQuantity,
+            };
+          }
+        }
       }
 
       if (specialProd) {
@@ -190,7 +209,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
             productNameSnapshot: product.name,
             isCustom: false,
             customUnit: product.unit || "عدد",
-            customNotes: null,
+            customNotes: product.isSpecial ? `[${product.code}]` : null,
             quantity: qty,
             unitPrice,
             unitCostSnapshot: unitCost,
@@ -198,7 +217,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
             lineTotal,
             lineCogs,
             lineProfit,
-            isSpecial: false,
+            isSpecial: !!product.isSpecial,
           });
         } else {
           // Check if productId actually belongs to specialProducts

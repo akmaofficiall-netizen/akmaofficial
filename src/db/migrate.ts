@@ -170,6 +170,7 @@ export async function migrateDatabase() {
       stock_quantity NUMERIC(15,4) DEFAULT 0,
       min_stock_quantity NUMERIC(15,4) DEFAULT 5,
       status TEXT DEFAULT 'active' NOT NULL,
+      is_special BOOLEAN DEFAULT false NOT NULL,
       created_at TIMESTAMP DEFAULT NOW() NOT NULL,
       updated_at TIMESTAMP DEFAULT NOW() NOT NULL
     );
@@ -691,6 +692,8 @@ export async function migrateDatabase() {
       ADD COLUMN IF NOT EXISTS target_stock_quantity NUMERIC(15,4) DEFAULT 50;
     ALTER TABLE products
       ADD COLUMN IF NOT EXISTS commission_rate_percent NUMERIC(5,2) DEFAULT 5;
+    ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS is_special BOOLEAN DEFAULT false NOT NULL;
     ALTER TABLE products
       ADD COLUMN IF NOT EXISTS notes TEXT;
 

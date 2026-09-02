@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { specialProducts } from "@/db/schema";
-import { eq, desc, ilike, or } from "drizzle-orm";
+import { products } from "@/db/schema";
+import { eq, desc, and } from "drizzle-orm";
 import { getNextSequenceCode } from "@/services/sequence";
 
 export async function GET(req: NextRequest) {
@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category")?.trim();
     const status = searchParams.get("status")?.trim();
 
-    let query = db.select().from(specialProducts).orderBy(desc(specialProducts.createdAt));
+    // Query unified products where isSpecial is true
+    let query = db.select().from(products).where(eq(products.isSpecial, true)).orderBy(desc(products.createdAt));
 
     const all = await query;
     let filtered = all;
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
     const code = await getNextSequenceCode("special_product");
 
     const [inserted] = await db
-      .insert(specialProducts)
+      .insert(products)
       .values({
         code,
         name: name.trim(),
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
         minStockQuantity: String(Math.max(0, Number(minStockQuantity) || 0)),
         status: status === "inactive" ? "inactive" : "active",
         notes: notes?.trim() || null,
+        isSpecial: true,
       })
       .returning();
 

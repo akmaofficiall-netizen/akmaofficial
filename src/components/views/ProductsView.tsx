@@ -28,6 +28,7 @@ export const ProductsView: React.FC = () => {
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"standard" | "special">("standard");
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -48,6 +49,7 @@ export const ProductsView: React.FC = () => {
     basePrice: 0,
     stockQuantity: 0,
     minStockQuantity: 5,
+    isSpecial: false,
     recipes: [] as { rawMaterialId: string; quantityRequired: number; wastagePercent: number }[],
   });
 
@@ -78,11 +80,12 @@ export const ProductsView: React.FC = () => {
     setFormData({
       code: "",
       name: "",
-      category: "عمومی",
+      category: activeTab === "special" ? "اختصاصی" : "عمومی",
       unit: "عدد",
       basePrice: 0,
       stockQuantity: 0,
       minStockQuantity: 5,
+      isSpecial: activeTab === "special",
       recipes: [],
     });
     setIsAddModalOpen(true);
@@ -228,6 +231,7 @@ export const ProductsView: React.FC = () => {
       basePrice: Number(res.product.basePrice),
       stockQuantity: Number(res.product.stockQuantity || 0),
       minStockQuantity: Number(res.product.minStockQuantity || 5),
+      isSpecial: !!res.product.isSpecial,
       recipes: (res.recipes || []).map((r: any) => ({
         rawMaterialId: r.rawMaterialId,
         quantityRequired: Number(r.quantityRequired),
@@ -259,9 +263,10 @@ export const ProductsView: React.FC = () => {
 
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchTerm.toLowerCase())
+      (activeTab === "special" ? !!p.isSpecial : !p.isSpecial) &&
+      (p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.category.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -284,6 +289,30 @@ export const ProductsView: React.FC = () => {
         >
           <Plus className="h-4 w-4" />
           افزودن محصول جدید
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800">
+        <button
+          onClick={() => setActiveTab("standard")}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+            activeTab === "standard"
+              ? "border-emerald-500 text-emerald-400"
+              : "border-transparent text-slate-400 hover:text-white"
+          }`}
+        >
+          محصولات عمومی و استاندارد
+        </button>
+        <button
+          onClick={() => setActiveTab("special")}
+          className={`px-4 py-2 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+            activeTab === "special"
+              ? "border-emerald-500 text-emerald-400"
+              : "border-transparent text-slate-400 hover:text-white"
+          }`}
+        >
+          محصولات اختصاصی پروژه
         </button>
       </div>
 
@@ -312,9 +341,16 @@ export const ProductsView: React.FC = () => {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="font-mono text-[10px] text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                    {p.code}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono text-[10px] text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                      {p.code}
+                    </span>
+                    {p.isSpecial && (
+                      <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-400 px-1.5 py-0.5 rounded font-semibold">
+                        محصول اختصاصی
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-base font-bold text-white mt-1">{p.name}</h3>
                   <p className="text-xs text-slate-400">دسته: {p.category}</p>
                 </div>

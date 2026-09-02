@@ -142,7 +142,7 @@ export async function POST(req: Request) {
 
     let code = body.code?.trim();
     if (!code) {
-      code = await getNextSequenceCode("product");
+      code = await getNextSequenceCode(body.isSpecial ? "special_product" : "product");
     }
 
     const [created] = await db
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
       .values({
         code,
         name: body.name.trim(),
-        category: body.category || "عمومی",
+        category: body.category || (body.isSpecial ? "اختصاصی" : "عمومی"),
         unit: body.unit || "عدد",
         imageUrl: body.imageUrl?.trim() || null,
         description: body.description?.trim() || null,
@@ -159,6 +159,7 @@ export async function POST(req: Request) {
         stockQuantity: body.stockQuantity ? Math.max(0, Number(body.stockQuantity) || 0).toString() : "0",
         minStockQuantity: body.minStockQuantity ? Math.max(0, Number(body.minStockQuantity) || 0).toString() : "5",
         status: body.status || "active",
+        isSpecial: !!body.isSpecial,
       })
       .returning();
 

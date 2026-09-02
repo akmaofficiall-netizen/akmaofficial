@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { specialProducts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { products } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
@@ -11,8 +11,8 @@ export async function GET(
     const { id } = await params;
     const items = await db
       .select()
-      .from(specialProducts)
-      .where(eq(specialProducts.id, id))
+      .from(products)
+      .where(and(eq(products.id, id), eq(products.isSpecial, true)))
       .limit(1);
 
     if (items.length === 0) {
@@ -57,8 +57,8 @@ export async function PUT(
 
     const existing = await db
       .select()
-      .from(specialProducts)
-      .where(eq(specialProducts.id, id))
+      .from(products)
+      .where(and(eq(products.id, id), eq(products.isSpecial, true)))
       .limit(1);
 
     if (existing.length === 0) {
@@ -93,9 +93,9 @@ export async function PUT(
     if (notes !== undefined) updateData.notes = notes?.trim() || null;
 
     const [updated] = await db
-      .update(specialProducts)
+      .update(products)
       .set(updateData)
-      .where(eq(specialProducts.id, id))
+      .where(and(eq(products.id, id), eq(products.isSpecial, true)))
       .returning();
 
     return NextResponse.json({
@@ -120,8 +120,8 @@ export async function DELETE(
     const { id } = await params;
     const existing = await db
       .select()
-      .from(specialProducts)
-      .where(eq(specialProducts.id, id))
+      .from(products)
+      .where(and(eq(products.id, id), eq(products.isSpecial, true)))
       .limit(1);
 
     if (existing.length === 0) {
@@ -131,7 +131,7 @@ export async function DELETE(
       );
     }
 
-    await db.delete(specialProducts).where(eq(specialProducts.id, id));
+    await db.delete(products).where(and(eq(products.id, id), eq(products.isSpecial, true)));
 
     return NextResponse.json({
       success: true,

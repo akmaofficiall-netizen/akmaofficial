@@ -69,11 +69,26 @@ export const ReportsView: React.FC<{
   // Tax Declaration state
   const [taxData, setTaxData] = useState<any>(null);
   const [taxLoading, setTaxLoading] = useState(false);
-  const [taxPreset, setTaxPreset] = useState("year1404");
-  const [taxJalaliStart, setTaxJalaliStart] = useState("1404/01/01");
-  const [taxJalaliEnd, setTaxJalaliEnd] = useState("1404/12/29");
-  const [taxStartDate, setTaxStartDate] = useState(() => jalaliToGregorian({ year: 1404, month: 1, day: 1 }).toISOString().split("T")[0]);
-  const [taxEndDate, setTaxEndDate] = useState(() => jalaliToGregorian({ year: 1404, month: 12, day: 29 }).toISOString().split("T")[0]);
+  const [taxPreset, setTaxPreset] = useState(() => {
+    const curYear = gregorianToJalali(new Date()).year || 1405;
+    return `year${curYear}`;
+  });
+  const [taxJalaliStart, setTaxJalaliStart] = useState(() => {
+    const curYear = gregorianToJalali(new Date()).year || 1405;
+    return `${curYear}/01/01`;
+  });
+  const [taxJalaliEnd, setTaxJalaliEnd] = useState(() => {
+    const curYear = gregorianToJalali(new Date()).year || 1405;
+    return `${curYear}/12/29`;
+  });
+  const [taxStartDate, setTaxStartDate] = useState(() => {
+    const curYear = gregorianToJalali(new Date()).year || 1405;
+    return jalaliToGregorian({ year: curYear, month: 1, day: 1 }).toISOString().split("T")[0];
+  });
+  const [taxEndDate, setTaxEndDate] = useState(() => {
+    const curYear = gregorianToJalali(new Date()).year || 1405;
+    return jalaliToGregorian({ year: curYear, month: 12, day: 29 }).toISOString().split("T")[0];
+  });
   const [taxDateError, setTaxDateError] = useState("");
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const taxDocRef = useRef<HTMLDivElement>(null);
@@ -119,15 +134,21 @@ export const ReportsView: React.FC<{
 
   const fetchTaxDeclaration = async (start = taxStartDate, end = taxEndDate) => {
     setTaxLoading(true);
+    setTaxDateError("");
     try {
       const projParam = selectedProjectId ? `&projectId=${selectedProjectId}` : "";
       const query = `/api/reports?type=tax_declaration&startDate=${start}&endDate=${end}${projParam}`;
       const res = await fetch(query).then((r) => r.json());
       if (res.success) {
         setTaxData(res.data);
+      } else {
+        setTaxDateError(res.error || "خطا در دریافت اطلاعات مالیاتی");
+        setTaxData(null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching tax declaration:", err);
+      setTaxDateError("خطای ارتباطی در دریافت اطلاعات مالیاتی");
+      setTaxData(null);
     } finally {
       setTaxLoading(false);
     }
@@ -877,7 +898,7 @@ export const ReportsView: React.FC<{
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-800/80 text-xs">
                 <div className="rounded-xl bg-slate-950/60 p-3 border border-slate-800">
                   <span className="text-slate-400 block text-[11px]">فروش مشمول دوره:</span>
-                  <b className="text-white font-mono text-sm mt-0.5 block">{formatMoney(taxData.statement.netOperatingRevenue || 0)}</b>
+                  <b className="text-white font-mono text-sm mt-0.5 block">{formatMoney(taxData.statement.netSalesRevenue || 0)}</b>
                 </div>
                 <div className="rounded-xl bg-slate-950/60 p-3 border border-slate-800">
                   <span className="text-slate-400 block text-[11px]">هزینه‌های قابل قبول مالیاتی:</span>

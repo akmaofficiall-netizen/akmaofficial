@@ -43,7 +43,9 @@ export async function getNextSequenceCode(type: SequenceType): Promise<string> {
           }
         }
       } else {
-        const existing = await db.select({ code: specialProducts.code }).from(specialProducts);
+        const existingSp = await db.select({ code: specialProducts.code }).from(specialProducts).catch(() => []);
+        const existingPrdSp = await db.select({ code: products.code }).from(products).where(eq(products.isSpecial, true)).catch(() => []);
+        const existing = [...existingSp, ...existingPrdSp];
         for (const item of existing) {
           const match = item.code.match(/SPC-(\d+)/i);
           if (match) {

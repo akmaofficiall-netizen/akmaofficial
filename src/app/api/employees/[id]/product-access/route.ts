@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { employees, employeeProjectAssignments, products, specialProducts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { logAuditEvent } from "@/services/audit";
 
 export async function GET(
@@ -52,20 +52,38 @@ export async function GET(
         stockQuantity: products.stockQuantity,
       })
       .from(products)
-      .where(eq(products.status, "active"));
+      .where(and(eq(products.status, "active"), eq(products.isSpecial, false)));
 
-    const allSpecialProducts = await db
+    let allSpecialProducts: any[] = await db
       .select({
-        id: specialProducts.id,
-        code: specialProducts.code,
-        name: specialProducts.name,
-        category: specialProducts.category,
-        unit: specialProducts.unit,
-        basePrice: specialProducts.basePrice,
-        stockQuantity: specialProducts.stockQuantity,
+        id: products.id,
+        code: products.code,
+        name: products.name,
+        category: products.category,
+        unit: products.unit,
+        basePrice: products.basePrice,
+        stockQuantity: products.stockQuantity,
       })
-      .from(specialProducts)
-      .where(eq(specialProducts.status, "active"));
+      .from(products)
+      .where(and(eq(products.status, "active"), eq(products.isSpecial, true)));
+
+    try {
+      const legacySp = await db
+        .select({
+          id: specialProducts.id,
+          code: specialProducts.code,
+          name: specialProducts.name,
+          category: specialProducts.category,
+          unit: specialProducts.unit,
+          basePrice: specialProducts.basePrice,
+          stockQuantity: specialProducts.stockQuantity,
+        })
+        .from(specialProducts)
+        .where(eq(specialProducts.status, "active"));
+      allSpecialProducts = [...allSpecialProducts, ...legacySp];
+    } catch (err) {
+      // Safe fallback
+    }
 
     return NextResponse.json({
       success: true,

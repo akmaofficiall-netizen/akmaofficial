@@ -78,6 +78,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (body.stockQuantity !== undefined) updateData.stockQuantity = body.stockQuantity.toString();
     if (body.minStockQuantity !== undefined) updateData.minStockQuantity = body.minStockQuantity.toString();
     if (body.status !== undefined) updateData.status = body.status;
+    if (body.isSpecial !== undefined) updateData.isSpecial = !!body.isSpecial;
 
     const [updated] = await db
       .update(products)

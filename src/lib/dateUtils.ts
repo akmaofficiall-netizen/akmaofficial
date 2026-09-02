@@ -105,44 +105,52 @@ export function toJalaliDate(
 
     const { showTime = false, format = "numeric", persianDigits = true } = options;
 
+    const jDate = gregorianToJalali(d);
+    if (jDate.year === 0) return "—";
+
     if (format === "words") {
-      const formatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        ...(showTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-      });
-      return formatter.format(d);
+      const months = [
+        "فروردین", "اردیبهشت", "خرداد",
+        "تیر", "مرداد", "شهریور",
+        "مهر", "آبان", "آذر",
+        "دی", "بهمن", "اسفند"
+      ];
+      const monthName = months[jDate.month - 1] || "";
+      let res = `${jDate.day} ${monthName} ${jDate.year}`;
+      if (showTime) {
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        res += ` ساعت ${hh}:${mm}`;
+      }
+      return persianDigits ? toPersianDigits(res) : res;
     }
 
     if (format === "short") {
-      const formatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-        month: "short",
-        day: "numeric",
-      });
-      return formatter.format(d);
+      const months = [
+        "فروردین", "اردیبهشت", "خرداد",
+        "تیر", "مرداد", "شهریور",
+        "مهر", "آبان", "آذر",
+        "دی", "بهمن", "اسفند"
+      ];
+      const monthName = months[jDate.month - 1] || "";
+      const res = `${jDate.day} ${monthName}`;
+      return persianDigits ? toPersianDigits(res) : res;
     }
 
-    const yearFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric" });
-    const monthFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { month: "2-digit" });
-    const dayFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", { day: "2-digit" });
-
-    const y = yearFormatter.format(d);
-    const m = monthFormatter.format(d);
-    const day = dayFormatter.format(d);
-
-    let res = `${y}/${m}/${day}`;
+    // Default numeric "YYYY/MM/DD"
+    const yStr = String(jDate.year);
+    const mStr = String(jDate.month).padStart(2, "0");
+    const dStr = String(jDate.day).padStart(2, "0");
+    let res = `${yStr}/${mStr}/${dStr}`;
 
     if (showTime) {
-      const timeFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      res += ` - ${timeFormatter.format(d)}`;
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      res += ` - ${hh}:${mm}`;
     }
 
-    if (!persianDigits) {
-      res = toLatinDigits(res);
+    if (persianDigits) {
+      res = toPersianDigits(res);
     }
 
     return res;

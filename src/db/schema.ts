@@ -267,6 +267,7 @@ export const products = pgTable("products", {
   targetStockQuantity: numeric("target_stock_quantity", { precision: 15, scale: 4 }).default("50"),
   commissionRatePercent: numeric("commission_rate_percent", { precision: 5, scale: 2 }).default("5"),
   status: text("status").default("active").notNull(), // active, inactive
+  isSpecial: boolean("is_special").default(false).notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

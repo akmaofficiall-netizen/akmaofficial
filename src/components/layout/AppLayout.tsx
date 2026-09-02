@@ -96,7 +96,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     { id: "invoices", label: "فروش و فاکتورها", icon: ShoppingBag },
     { id: "raw_materials", label: "مواد اولیه و قطعات", icon: Package },
     { id: "products", label: "محصولات و BOM", icon: Layers },
-    { id: "special_products", label: "محصولات اختصاصی", icon: Sparkles },
     { id: "production", label: "بچ‌های تولید", icon: Factory },
     { id: "inventory", label: "انبار و موجودی", icon: Layers },
     { id: "customers", label: "مشتریان و CRM", icon: Users },

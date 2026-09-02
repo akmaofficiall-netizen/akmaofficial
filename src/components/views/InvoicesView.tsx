@@ -140,33 +140,39 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
 
   const getCombinedProductsList = () => {
     const list: any[] = [];
+    const seenIds = new Set<string>();
     products.forEach((p) => {
+      const isSpec = !!p.isSpecial;
+      seenIds.add(p.id);
       list.push({
         id: p.id,
-        name: p.name,
+        name: isSpec ? `[اختصاصی] ${p.name}` : p.name,
         code: p.code,
         unit: p.unit,
-        category: p.category,
-        basePrice: p.basePrice,
-        effectivePrice: p.effectivePrice ?? p.basePrice,
-        stockQuantity: p.stockQuantity,
-        isSpecial: false,
+        category: p.category || (isSpec ? "اختصاصی" : "عمومی"),
+        basePrice: Number(p.basePrice) || 0,
+        effectivePrice: Number(p.effectivePrice ?? p.basePrice) || 0,
+        stockQuantity: Number(p.stockQuantity) || 0,
+        isSpecial: isSpec,
         hasProjectOverride: p.hasProjectOverride,
       });
     });
     specialProducts.forEach((sp) => {
-      list.push({
-        id: sp.id,
-        name: `[اختصاصی] ${sp.name}`,
-        code: sp.code,
-        unit: sp.unit,
-        category: sp.category || "اختصاصی",
-        basePrice: Number(sp.basePrice) || 0,
-        effectivePrice: Number(sp.basePrice) || 0,
-        stockQuantity: Number(sp.stockQuantity) || 0,
-        isSpecial: true,
-        hasProjectOverride: false,
-      });
+      if (!seenIds.has(sp.id)) {
+        seenIds.add(sp.id);
+        list.push({
+          id: sp.id,
+          name: `[اختصاصی] ${sp.name}`,
+          code: sp.code,
+          unit: sp.unit,
+          category: sp.category || "اختصاصی",
+          basePrice: Number(sp.basePrice) || 0,
+          effectivePrice: Number(sp.basePrice) || 0,
+          stockQuantity: Number(sp.stockQuantity) || 0,
+          isSpecial: true,
+          hasProjectOverride: false,
+        });
+      }
     });
     return list;
   };
