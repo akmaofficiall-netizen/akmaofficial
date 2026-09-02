@@ -109,11 +109,103 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     notes: "",
   });
 
+  const [specialProducts, setSpecialProducts] = useState<any[]>([]);
+  const [employeeProductAccess, setEmployeeProductAccess] = useState<{
+    canSellAllProducts: boolean;
+    allowedProductIds: string[];
+    allowedSpecialProductIds: string[];
+  } | null>(null);
+
+  const loadEmployeeProductAccess = async (empId: string | null) => {
+    if (!empId) {
+      setEmployeeProductAccess(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/employees/${empId}/product-access`).then((r) => r.json());
+      if (res.success && res.data) {
+        setEmployeeProductAccess({
+          canSellAllProducts: res.data.canSellAllProducts !== false,
+          allowedProductIds: Array.isArray(res.data.allowedProductIds) ? res.data.allowedProductIds : [],
+          allowedSpecialProductIds: Array.isArray(res.data.allowedSpecialProductIds) ? res.data.allowedSpecialProductIds : [],
+        });
+      } else {
+        setEmployeeProductAccess(null);
+      }
+    } catch (err) {
+      console.error("Error loading employee product access:", err);
+      setEmployeeProductAccess(null);
+    }
+  };
+
+  const getCombinedProductsList = () => {
+    const list: any[] = [];
+    products.forEach((p) => {
+      list.push({
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        unit: p.unit,
+        category: p.category,
+        basePrice: p.basePrice,
+        effectivePrice: p.effectivePrice ?? p.basePrice,
+        stockQuantity: p.stockQuantity,
+        isSpecial: false,
+        hasProjectOverride: p.hasProjectOverride,
+      });
+    });
+    specialProducts.forEach((sp) => {
+      list.push({
+        id: sp.id,
+        name: `[اختصاصی] ${sp.name}`,
+        code: sp.code,
+        unit: sp.unit,
+        category: sp.category || "اختصاصی",
+        basePrice: Number(sp.basePrice) || 0,
+        effectivePrice: Number(sp.basePrice) || 0,
+        stockQuantity: Number(sp.stockQuantity) || 0,
+        isSpecial: true,
+        hasProjectOverride: false,
+      });
+    });
+    return list;
+  };
+
+  const getFilteredProducts = () => {
+    const combined = getCombinedProductsList();
+    if (!employeeProductAccess) {
+      return combined;
+    }
+    const { canSellAllProducts, allowedProductIds, allowedSpecialProductIds } = employeeProductAccess;
+    if (canSellAllProducts) {
+      return combined;
+    }
+    return combined.filter((p) => {
+      if (p.isSpecial) {
+        return allowedSpecialProductIds.includes(p.id);
+      } else {
+        return allowedProductIds.includes(p.id);
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (isAddModalOpen) {
+      loadEmployeeProductAccess(form.employeeId || null);
+    }
+  }, [form.employeeId, isAddModalOpen]);
+
+  useEffect(() => {
+    if (editingFullInvoice) {
+      loadEmployeeProductAccess(editForm.employeeId || null);
+    }
+  }, [editForm.employeeId, editingFullInvoice]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const projParam = selectedProjectId ? `?projectId=${selectedProjectId}` : "";
-      const [invRes, custRes, projRes, prodRes, accRes, empRes, settRes] = await Promise.all([
+      const [invRes, custRes, projRes, prodRes, accRes, empRes, settRes, specRes] = await Promise.all([
         fetch(`/api/invoices${projParam}`).then((r) => r.json()),
         fetch("/api/customers").then((r) => r.json()),
         fetch("/api/projects").then((r) => r.json()),
@@ -121,6 +213,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
         fetch("/api/accounts").then((r) => r.json()),
         fetch("/api/employees").then((r) => r.json()),
         fetch("/api/settings").then((r) => r.json()),
+        fetch("/api/special-products").then((r) => r.json()),
       ]);
 
       if (invRes.success) setInvoices(invRes.invoices || []);
@@ -130,6 +223,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       if (accRes.success) setAccounts(accRes.accounts || []);
       if (empRes.success) setEmployees(empRes.employees || []);
       if (settRes?.success && settRes.settings) setSystemSettings(settRes.settings);
+      if (specRes.success) setSpecialProducts(specRes.specialProducts || []);
     } catch (err) {
       console.error("Error fetching invoices:", err);
     } finally {
@@ -198,6 +292,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   const openAddModal = () => {
     const defaultProjId = selectedProjectId || (projects[0]?.id || "");
     const defaultCust = customers[0];
+    const list = getFilteredProducts();
     setForm({
       customerId: defaultCust?.id || "",
       projectId: defaultProjId,
@@ -206,9 +301,9 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       invoiceDate: new Date(),
       dueDate: null,
       invoiceDiscount: 0,
-      items: products.length > 0
-        ? [{ isCustom: false, productId: products[0].id, quantity: 1, unitPrice: products[0].effectivePrice ?? products[0].basePrice, discountAmount: 0 }]
-        : [{ isCustom: true, productName: "", customUnit: "عدد", customNotes: "", quantity: 1, unitPrice: 0, discountAmount: 0 }],
+      items: list.length > 0
+        ? [{ isCustom: false, productId: list[0].id, quantity: 1, unitPrice: list[0].effectivePrice ?? list[0].basePrice, discountAmount: 0 }]
+        : [],
       initialPaymentAmount: 0,
       initialPaymentAccountId: accounts[0]?.id || "",
       notes: "",
@@ -220,7 +315,8 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   };
 
   const handleProductChange = (index: number, productId: string) => {
-    const prod = products.find((p) => p.id === productId);
+    const list = getFilteredProducts();
+    const prod = list.find((p) => p.id === productId);
     if (!prod) return;
     const updated = [...form.items];
     updated[index] = {
@@ -233,8 +329,9 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   };
 
   const addLineItem = () => {
-    if (products.length > 0) {
-      const defaultProd = products[0];
+    const list = getFilteredProducts();
+    if (list.length > 0) {
+      const defaultProd = list[0];
       setForm({
         ...form,
         items: [
@@ -248,57 +345,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
           },
         ],
       });
-    } else {
-      addCustomLineItem();
     }
-  };
-
-  const addCustomLineItem = () => {
-    setForm({
-      ...form,
-      items: [
-        ...form.items,
-        {
-          isCustom: true,
-          productId: null,
-          productName: "",
-          customUnit: "عدد",
-          customNotes: "",
-          quantity: 1,
-          unitPrice: 0,
-          discountAmount: 0,
-        },
-      ],
-    });
-  };
-
-  const toggleLineItemType = (index: number) => {
-    const item = form.items[index];
-    const isNowCustom = !item.isCustom;
-    const updated = [...form.items];
-    if (isNowCustom) {
-      const currentProd = products.find((p) => p.id === item.productId);
-      updated[index] = {
-        isCustom: true,
-        productId: null,
-        productName: currentProd?.name || "",
-        customUnit: currentProd?.unit || "عدد",
-        customNotes: "",
-        quantity: item.quantity || 1,
-        unitPrice: item.unitPrice || 0,
-        discountAmount: item.discountAmount || 0,
-      };
-    } else {
-      const defaultProd = products[0];
-      updated[index] = {
-        isCustom: false,
-        productId: defaultProd?.id || "",
-        quantity: item.quantity || 1,
-        unitPrice: defaultProd ? (defaultProd.effectivePrice ?? defaultProd.basePrice) : item.unitPrice || 0,
-        discountAmount: item.discountAmount || 0,
-      };
-    }
-    setForm({ ...form, items: updated });
   };
 
   const removeLineItem = (index: number) => {
@@ -315,15 +362,6 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       return;
     }
 
-    // Validate custom items have names
-    for (let i = 0; i < form.items.length; i++) {
-      const it = form.items[i];
-      if (it.isCustom && !it.productName?.trim()) {
-        alert(`لطفاً نام کالای سفارشی در سطر شماره ${i + 1} را وارد کنید.`);
-        return;
-      }
-    }
-
     setSaving(true);
     try {
       const payload: any = {
@@ -335,11 +373,11 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
         dueDate: form.dueDate ? form.dueDate.toISOString() : undefined,
         invoiceDiscount: form.invoiceDiscount,
         items: form.items.map((it) => ({
-          productId: it.isCustom ? null : it.productId,
-          isCustom: !!it.isCustom,
-          productName: it.productName,
-          customUnit: it.customUnit,
-          customNotes: it.customNotes,
+          productId: it.productId,
+          isCustom: false,
+          productName: undefined,
+          customUnit: undefined,
+          customNotes: undefined,
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           discountAmount: it.discountAmount || 0,
@@ -379,6 +417,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     const res = await fetch(`/api/invoices/${inv.id}`).then((r) => r.json());
     if (!res.success) return alert(res.error || "خطا در دریافت اطلاعات فاکتور");
 
+    const list = getFilteredProducts();
     setEditingFullInvoice(res);
     setEditForm({
       id: res.invoice.id,
@@ -391,24 +430,25 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       invoiceDiscount: Number(res.invoice.invoiceDiscount) || 0,
       items: res.items && res.items.length > 0
         ? res.items.map((i: any) => ({
-            productId: i.productId || null,
-            isCustom: !!i.isCustom || !i.productId,
-            productName: i.productNameSnapshot || i.productName || "",
-            customUnit: i.productUnit || i.customUnit || "عدد",
-            customNotes: i.customNotes || "",
+            productId: i.productId || i.specialProductId || null,
+            isCustom: false,
+            productName: "",
+            customUnit: "عدد",
+            customNotes: "",
             quantity: Number(i.quantity) || 1,
             unitPrice: Number(i.unitPrice) || 0,
             discountAmount: Number(i.discountAmount) || 0,
           }))
-        : products.length > 0
-        ? [{ isCustom: false, productId: products[0].id, quantity: 1, unitPrice: products[0].effectivePrice ?? products[0].basePrice, discountAmount: 0 }]
-        : [{ isCustom: true, productName: "", customUnit: "عدد", customNotes: "", quantity: 1, unitPrice: 0, discountAmount: 0 }],
+        : list.length > 0
+        ? [{ isCustom: false, productId: list[0].id, quantity: 1, unitPrice: list[0].effectivePrice ?? list[0].basePrice, discountAmount: 0 }]
+        : [],
       notes: res.invoice.notes || "",
     });
   };
 
   const handleEditProductChange = (index: number, productId: string) => {
-    const prod = products.find((p) => p.id === productId);
+    const list = getFilteredProducts();
+    const prod = list.find((p) => p.id === productId);
     if (!prod) return;
     const updated = [...editForm.items];
     updated[index] = {
@@ -421,8 +461,9 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   };
 
   const addEditLineItem = () => {
-    if (products.length > 0) {
-      const defaultProd = products[0];
+    const list = getFilteredProducts();
+    if (list.length > 0) {
+      const defaultProd = list[0];
       setEditForm({
         ...editForm,
         items: [
@@ -436,57 +477,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
           },
         ],
       });
-    } else {
-      addEditCustomLineItem();
     }
-  };
-
-  const addEditCustomLineItem = () => {
-    setEditForm({
-      ...editForm,
-      items: [
-        ...editForm.items,
-        {
-          isCustom: true,
-          productId: null,
-          productName: "",
-          customUnit: "عدد",
-          customNotes: "",
-          quantity: 1,
-          unitPrice: 0,
-          discountAmount: 0,
-        },
-      ],
-    });
-  };
-
-  const toggleEditLineItemType = (index: number) => {
-    const item = editForm.items[index];
-    const isNowCustom = !item.isCustom;
-    const updated = [...editForm.items];
-    if (isNowCustom) {
-      const currentProd = products.find((p) => p.id === item.productId);
-      updated[index] = {
-        isCustom: true,
-        productId: null,
-        productName: currentProd?.name || "",
-        customUnit: currentProd?.unit || "عدد",
-        customNotes: "",
-        quantity: item.quantity || 1,
-        unitPrice: item.unitPrice || 0,
-        discountAmount: item.discountAmount || 0,
-      };
-    } else {
-      const defaultProd = products[0];
-      updated[index] = {
-        isCustom: false,
-        productId: defaultProd?.id || "",
-        quantity: item.quantity || 1,
-        unitPrice: defaultProd ? (defaultProd.effectivePrice ?? defaultProd.basePrice) : item.unitPrice || 0,
-        discountAmount: item.discountAmount || 0,
-      };
-    }
-    setEditForm({ ...editForm, items: updated });
   };
 
   const removeEditLineItem = (index: number) => {
@@ -503,14 +494,6 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       return;
     }
 
-    for (let i = 0; i < editForm.items.length; i++) {
-      const it = editForm.items[i];
-      if (it.isCustom && !it.productName?.trim()) {
-        alert(`لطفاً نام کالای سفارشی در سطر شماره ${i + 1} را وارد کنید.`);
-        return;
-      }
-    }
-
     setSaving(true);
     try {
       const res = await fetch(`/api/invoices/${editForm.id}`, {
@@ -525,11 +508,11 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
           dueDate: editForm.dueDate ? editForm.dueDate.toISOString() : undefined,
           invoiceDiscount: editForm.invoiceDiscount,
           items: editForm.items.map((it) => ({
-            productId: it.isCustom ? null : it.productId,
-            isCustom: !!it.isCustom,
-            productName: it.productName,
-            customUnit: it.customUnit,
-            customNotes: it.customNotes,
+            productId: it.productId,
+            isCustom: false,
+            productName: undefined,
+            customUnit: undefined,
+            customNotes: undefined,
             quantity: it.quantity,
             unitPrice: it.unitPrice,
             discountAmount: it.discountAmount || 0,
@@ -1028,15 +1011,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                       className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-950/40 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-900/60 transition"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      افزودن کالا از انبار
-                    </button>
-                    <button
-                      type="button"
-                      onClick={addCustomLineItem}
-                      className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60 transition"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      افزودن کالای سفارشی / دستی
+                      افزودن کالا
                     </button>
                   </div>
                 </div>
@@ -1046,7 +1021,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                     <thead className="bg-slate-900 text-slate-400 font-semibold">
                       <tr>
                         <th className="p-3 text-center w-12">ردیف</th>
-                        <th className="p-3">نوع و شرح کالا / خدمات</th>
+                        <th className="p-3">نام و نوع محصول</th>
                         <th className="p-3 text-center w-24">تعداد / مقدار</th>
                         <th className="p-3 text-center w-36">قیمت واحد (تومان)</th>
                         <th className="p-3 text-center w-32">تخفیف سطر (تومان)</th>
@@ -1057,90 +1032,33 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                     <tbody className="divide-y divide-slate-800 bg-slate-950">
                       {form.items.map((item, idx) => {
                         const lineTotal = item.quantity * item.unitPrice - (item.discountAmount || 0);
-                        const prod = item.productId ? products.find((p) => p.id === item.productId) : null;
+                        const filteredProducts = getFilteredProducts();
+                        const prod = item.productId ? filteredProducts.find((p) => p.id === item.productId) : null;
 
                         return (
-                          <tr key={idx} className={item.isCustom ? "bg-emerald-950/10" : ""}>
+                          <tr key={idx}>
                             <td className="p-3 font-bold text-slate-500 text-center">{idx + 1}</td>
                             <td className="p-3">
                               <div className="space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${item.isCustom ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700/50" : "bg-purple-900/50 text-purple-300 border border-purple-700/50"}`}>
-                                    {item.isCustom ? "کالای سفارشی (بدون کسر انبار)" : "محصول از انبار"}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleLineItemType(idx)}
-                                    className="text-[10px] text-slate-400 hover:text-cyan-300 underline underline-offset-2 transition"
+                                <div>
+                                  <select
+                                    value={item.productId || ""}
+                                    onChange={(e) => handleProductChange(idx, e.target.value)}
+                                    className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white"
                                   >
-                                    {item.isCustom ? "تغییر به انتخاب از انبار" : "تغییر به کالای سفارشی / دستی"}
-                                  </button>
+                                    {filteredProducts.map((p) => (
+                                      <option key={p.id} value={p.id}>
+                                        {p.name} (موجودی: {formatNumber(p.stockQuantity)} {p.unit}) {p.isSpecial ? "⭐" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {prod?.hasProjectOverride && (
+                                    <span className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                                      <Tag className="h-2.5 w-2.5" />
+                                      نرخ ویژه پروژه اعمال شد
+                                    </span>
+                                  )}
                                 </div>
-
-                                {item.isCustom ? (
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    <div className="sm:col-span-2">
-                                      <input
-                                        type="text"
-                                        required
-                                        placeholder="نام کالا یا خدمات سفارشی (مثلاً: خدمات برش لیزر، پروفیل سفارشی)"
-                                        value={item.productName || ""}
-                                        onChange={(e) => {
-                                          const updated = [...form.items];
-                                          updated[idx].productName = e.target.value;
-                                          setForm({ ...form, items: updated });
-                                        }}
-                                        className="w-full rounded-xl border border-emerald-600/40 bg-slate-900 p-2 text-white placeholder:text-slate-500"
-                                      />
-                                    </div>
-                                    <div>
-                                      <input
-                                        type="text"
-                                        placeholder="واحد (عدد، کیلوگرم، متر)"
-                                        value={item.customUnit || ""}
-                                        onChange={(e) => {
-                                          const updated = [...form.items];
-                                          updated[idx].customUnit = e.target.value;
-                                          setForm({ ...form, items: updated });
-                                        }}
-                                        className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-center"
-                                      />
-                                    </div>
-                                    <div className="sm:col-span-3">
-                                      <input
-                                        type="text"
-                                        placeholder="توضیحات و مشخصات فنی کالای سفارشی (اختیاری)"
-                                        value={item.customNotes || ""}
-                                        onChange={(e) => {
-                                          const updated = [...form.items];
-                                          updated[idx].customNotes = e.target.value;
-                                          setForm({ ...form, items: updated });
-                                        }}
-                                        className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-1.5 text-[11px] text-slate-300 placeholder:text-slate-600"
-                                      />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <select
-                                      value={item.productId || ""}
-                                      onChange={(e) => handleProductChange(idx, e.target.value)}
-                                      className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white"
-                                    >
-                                      {products.map((p) => (
-                                        <option key={p.id} value={p.id}>
-                                          {p.name} (موجودی: {formatNumber(p.stockQuantity)} {p.unit})
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {prod?.hasProjectOverride && (
-                                      <span className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
-                                        <Tag className="h-2.5 w-2.5" />
-                                        نرخ ویژه پروژه اعمال شد
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
                               </div>
                             </td>
                             <td className="p-3">
@@ -1940,15 +1858,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                       className="flex items-center gap-1 rounded-xl bg-cyan-600/20 px-3 py-1.5 font-bold text-cyan-400 hover:bg-cyan-600/30 transition border border-cyan-500/30"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      افزودن کالا از انبار
-                    </button>
-                    <button
-                      type="button"
-                      onClick={addEditCustomLineItem}
-                      className="flex items-center gap-1 rounded-xl bg-emerald-600/20 px-3 py-1.5 font-bold text-emerald-400 hover:bg-emerald-600/30 transition border border-emerald-500/30"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      افزودن کالای سفارشی / دستی
+                      افزودن کالا
                     </button>
                   </div>
                 </div>
@@ -1956,30 +1866,22 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                 <div className="space-y-3">
                   {editForm.items.map((item, index) => {
                     const lineTotal = item.quantity * item.unitPrice - (item.discountAmount || 0);
-                    const prod = item.productId ? products.find((p) => p.id === item.productId) : null;
+                    const filteredProducts = getFilteredProducts();
+                    const prod = item.productId ? filteredProducts.find((p) => p.id === item.productId) : null;
 
                     return (
                       <div
                         key={index}
-                        className={`rounded-2xl p-3 border transition ${item.isCustom ? "bg-emerald-950/20 border-emerald-800/40" : "bg-slate-950 border-slate-800"}`}
+                        className="rounded-2xl p-3 border border-slate-800 bg-slate-950 transition"
                       >
                         <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-2.5">
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-slate-500 text-xs">#{index + 1}</span>
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${item.isCustom ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700/60" : "bg-purple-900/60 text-purple-300 border border-purple-700/60"}`}
-                            >
-                              {item.isCustom ? "کالای سفارشی / خدمات (بدون کسر انبار)" : "کالای انبار سیستمی"}
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-900/60 text-purple-300 border border-purple-700/60">
+                              کالای فاکتور شده
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => toggleEditLineItemType(index)}
-                              className="text-[11px] text-slate-400 hover:text-cyan-300 underline underline-offset-2 transition"
-                            >
-                              {item.isCustom ? "تبدیل به انتخاب از انبار" : "تبدیل به کالای سفارشی / دستی"}
-                            </button>
                             <button
                               type="button"
                               onClick={() => removeEditLineItem(index)}
@@ -1991,170 +1893,71 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                           </div>
                         </div>
 
-                        {item.isCustom ? (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                              <div className="sm:col-span-6">
-                                <label className="block text-[10px] text-slate-400 mb-0.5">
-                                  نام کالا یا خدمات سفارشی <span className="text-rose-400">*</span>
-                                </label>
-                                <input
-                                  type="text"
-                                  required
-                                  placeholder="نام کالا یا خدمات سفارشی"
-                                  value={item.productName || ""}
-                                  onChange={(e) => {
-                                    const updated = [...editForm.items];
-                                    updated[index].productName = e.target.value;
-                                    setEditForm({ ...editForm, items: updated });
-                                  }}
-                                  className="w-full rounded-xl border border-emerald-600/40 bg-slate-900 p-2 text-white text-xs"
-                                />
-                              </div>
-                              <div className="sm:col-span-2">
-                                <label className="block text-[10px] text-slate-400 mb-0.5">واحد</label>
-                                <input
-                                  type="text"
-                                  placeholder="واحد"
-                                  value={item.customUnit || ""}
-                                  onChange={(e) => {
-                                    const updated = [...editForm.items];
-                                    updated[index].customUnit = e.target.value;
-                                    setEditForm({ ...editForm, items: updated });
-                                  }}
-                                  className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs text-center"
-                                />
-                              </div>
-                              <div className="sm:col-span-4">
-                                <label className="block text-[10px] text-slate-400 mb-0.5">توضیحات اختیاری</label>
-                                <input
-                                  type="text"
-                                  placeholder="مشخصات و یادداشت سطر"
-                                  value={item.customNotes || ""}
-                                  onChange={(e) => {
-                                    const updated = [...editForm.items];
-                                    updated[index].customNotes = e.target.value;
-                                    setEditForm({ ...editForm, items: updated });
-                                  }}
-                                  className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs"
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                              <div className="sm:col-span-3">
-                                <label className="block text-[10px] text-slate-400 mb-0.5">مقدار / تعداد</label>
-                                <input
-                                  type="number"
-                                  min="0.001"
-                                  step="any"
-                                  value={item.quantity}
-                                  onChange={(e) => {
-                                    const updated = [...editForm.items];
-                                    updated[index].quantity = Number(e.target.value) || 0;
-                                    setEditForm({ ...editForm, items: updated });
-                                  }}
-                                  className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center text-xs"
-                                />
-                              </div>
-                              <div className="sm:col-span-4">
-                                <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
-                                <MoneyInput
-                                  value={item.unitPrice}
-                                  onChange={(val) => {
-                                    const updated = [...editForm.items];
-                                    updated[index].unitPrice = val;
-                                    setEditForm({ ...editForm, items: updated });
-                                  }}
-                                  className="w-full text-xs py-1.5"
-                                  unit="تومان"
-                                />
-                              </div>
-                              <div className="sm:col-span-3">
-                                <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
-                                <MoneyInput
-                                  value={item.discountAmount}
-                                  onChange={(val) => {
-                                    const updated = [...editForm.items];
-                                    updated[index].discountAmount = val;
-                                    setEditForm({ ...editForm, items: updated });
-                                  }}
-                                  className="w-full text-xs py-1.5"
-                                  unit="تومان"
-                                />
-                              </div>
-                              <div className="sm:col-span-2 text-left pt-3">
-                                <span className="text-[10px] text-slate-400 block">جمع سطر:</span>
-                                <span className="font-mono font-bold text-white text-xs">{formatMoney(lineTotal)}</span>
-                              </div>
-                            </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                          <div className="sm:col-span-4">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">انتخاب محصول</label>
+                            <select
+                              value={item.productId || ""}
+                              onChange={(e) => handleEditProductChange(index, e.target.value)}
+                              className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs"
+                            >
+                              {filteredProducts.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({formatMoney(p.effectivePrice ?? p.basePrice)}) {p.isSpecial ? "⭐" : ""}
+                                </option>
+                              ))}
+                            </select>
                           </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                            <div className="sm:col-span-4">
-                              <label className="block text-[10px] text-slate-400 mb-0.5">انتخاب محصول</label>
-                              <select
-                                value={item.productId || ""}
-                                onChange={(e) => handleEditProductChange(index, e.target.value)}
-                                className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs"
-                              >
-                                {products.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} ({formatMoney(p.effectivePrice ?? p.basePrice)})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
 
-                            <div className="sm:col-span-2">
-                              <label className="block text-[10px] text-slate-400 mb-0.5">تعداد / مقدار</label>
-                              <input
-                                type="number"
-                                min="0.001"
-                                step="any"
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  const updated = [...editForm.items];
-                                  updated[index].quantity = Number(e.target.value) || 0;
-                                  setEditForm({ ...editForm, items: updated });
-                                }}
-                                className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center text-xs"
-                              />
-                            </div>
-
-                            <div className="sm:col-span-3">
-                              <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
-                              <MoneyInput
-                                value={item.unitPrice}
-                                onChange={(val) => {
-                                  const updated = [...editForm.items];
-                                  updated[index].unitPrice = val;
-                                  setEditForm({ ...editForm, items: updated });
-                                }}
-                                className="w-full text-xs py-1.5"
-                                unit="تومان"
-                              />
-                            </div>
-
-                            <div className="sm:col-span-2">
-                              <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
-                              <MoneyInput
-                                value={item.discountAmount}
-                                onChange={(val) => {
-                                  const updated = [...editForm.items];
-                                  updated[index].discountAmount = val;
-                                  setEditForm({ ...editForm, items: updated });
-                                }}
-                                className="w-full text-xs py-1.5"
-                                unit="تومان"
-                              />
-                            </div>
-
-                            <div className="sm:col-span-1 text-left">
-                              <span className="text-[10px] text-slate-400 block">جمع سطر:</span>
-                              <span className="font-mono font-bold text-white text-[11px]">{formatMoney(lineTotal)}</span>
-                            </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">تعداد / مقدار</label>
+                            <input
+                              type="number"
+                              min="0.001"
+                              step="any"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const updated = [...editForm.items];
+                                updated[index].quantity = Number(e.target.value) || 0;
+                                setEditForm({ ...editForm, items: updated });
+                              }}
+                              className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center text-xs"
+                            />
                           </div>
-                        )}
+
+                          <div className="sm:col-span-3">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
+                            <MoneyInput
+                              value={item.unitPrice}
+                              onChange={(val) => {
+                                const updated = [...editForm.items];
+                                updated[index].unitPrice = val;
+                                setEditForm({ ...editForm, items: updated });
+                              }}
+                              className="w-full text-xs py-1.5"
+                              unit="تومان"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
+                            <MoneyInput
+                              value={item.discountAmount}
+                              onChange={(val) => {
+                                const updated = [...editForm.items];
+                                updated[index].discountAmount = val;
+                                setEditForm({ ...editForm, items: updated });
+                              }}
+                              className="w-full text-xs py-1.5"
+                              unit="تومان"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-1 text-left">
+                            <span className="text-[10px] text-slate-400 block">جمع سطر:</span>
+                            <span className="font-mono font-bold text-white text-[11px]">{formatMoney(lineTotal)}</span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })}

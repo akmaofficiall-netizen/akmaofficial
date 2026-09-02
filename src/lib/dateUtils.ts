@@ -5,6 +5,8 @@
  * All conversions go through this centralized module.
  */
 
+import * as jalaali from "jalaali-js";
+
 // ─── Persian/Arabic digit conversion ───────────────────────────────────────
 
 const FA_DIGITS = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
@@ -31,8 +33,8 @@ export interface JalaliDate {
 
 const JALALI_MONTHS = [0, 31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
 
-function isJalaliLeapYear(year: number): boolean {
-  return [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53, 57, 61, 65, 69].includes(year % 33);
+export function isJalaliLeapYear(year: number): boolean {
+  return jalaali.isLeapJalaaliYear(year);
 }
 
 function jalaliDayOfYear(year: number, month: number, day: number): number {
@@ -51,84 +53,20 @@ export function gregorianToJalali(date: Date | string | number): JalaliDate {
   const d = new Date(date);
   if (isNaN(d.getTime())) return { year: 0, month: 0, day: 0 };
 
-  // Adjust for Iran timezone (UTC+3:30)
-  const local = new Date(d.getTime() + (3.5 * 60 * 60 * 1000));
-
-  const gy = local.getUTCFullYear();
-  const gm = local.getUTCMonth() + 1;
-  const gd = local.getUTCDate();
-
-  const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-  let gy2 = gy;
-  if (gm > 2) gy2++;
-  let days =
-    355666 +
-    365 * gy +
-    Math.floor((gy2 + 3) / 4) -
-    Math.floor((gy2 + 99) / 100) +
-    Math.floor((gy2 + 399) / 400) +
-    gd +
-    g_d_m[gm - 1];
-  let jy = -1595 + 33 * Math.floor(days / 12053);
-  days %= 12053;
-  jy += 4 * Math.floor(days / 1461);
-  days %= 1461;
-  if (days > 365) {
-    jy += Math.floor((days - 1) / 365);
-    days = (days - 1) % 365;
-  }
-  let jm: number;
-  let jd: number;
-  if (days < 186) {
-    jm = 1 + Math.floor(days / 31);
-    jd = 1 + (days % 31);
-  } else {
-    jm = 7 + Math.floor((days - 186) / 30);
-    jd = 1 + ((days - 186) % 30);
-  }
-
+  const { jy, jm, jd } = jalaali.toJalaali(d.getFullYear(), d.getMonth() + 1, d.getDate());
   return { year: jy, month: jm, day: jd };
 }
 
 /**
- * Convert Jalali Date to Gregorian
+ * Convert Jalali Date to Gregorian Date
  */
 export function jalaliToGregorian(jalali: JalaliDate): Date {
   const { year: jy, month: jm, day: jd } = jalali;
-
-  let jy2 = jy + 1595;
-  let days =
-    -355668 +
-    365 * jy +
-    Math.floor(jy / 33) * 8 +
-    Math.floor(((jy % 33) + 3) / 4) +
-    jd +
-    (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
-
-  let gy = 400 * Math.floor(days / 146097);
-  days %= 146097;
-  if (days > 36524) {
-    gy += 100 * Math.floor(--days / 36524);
-    days %= 36524;
-    if (days >= 365) days++;
+  if (!jy || !jm || !jd || jy < 1000) {
+    return new Date();
   }
-  gy += 4 * Math.floor(days / 1461);
-  days %= 1461;
-  if (days > 365) {
-    gy += Math.floor((days - 1) / 365);
-    days = (days - 1) % 365;
-  }
-  let gd = days + 1;
-  const salA = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  let gm = 0;
-  for (gm = 0; gm < 13; gm++) {
-    const l = salA[gm];
-    if (gd <= l) break;
-    gd -= l;
-  }
-
-  // Convert to UTC by subtracting Iran timezone offset
-  return new Date(Date.UTC(gy, gm - 1, gd, 0, 0, 0) - 3.5 * 60 * 60 * 1000);
+  const { gy, gm, gd } = jalaali.toGregorian(jy, jm, jd);
+  return new Date(Date.UTC(gy, gm - 1, gd, 0, 0, 0));
 }
 
 /**
@@ -249,10 +187,8 @@ export function getStartOfJalaliMonth(jalali: JalaliDate): Date {
  * Get end of Jalali month
  */
 export function getEndOfJalaliMonth(jalali: JalaliDate): Date {
-  const maxDay = JALALI_MONTHS[jalali.month] || 30;
-  const leapExtra = jalali.month > 6 && isJalaliLeapYear(jalali.year) ? 1 : 0;
-  const day = Math.min(jalali.day, maxDay + leapExtra);
-  const d = jalaliToGregorian({ year: jalali.year, month: jalali.month, day });
+  const maxDay = jalaali.jalaaliMonthLength(jalali.year, jalali.month);
+  const d = jalaliToGregorian({ year: jalali.year, month: jalali.month, day: maxDay });
   d.setUTCHours(23, 59, 59, 999);
   return d;
 }

@@ -25,7 +25,11 @@ import {
   Receipt,
   Coins,
   Briefcase,
-  Edit3
+  Edit3,
+  Package,
+  Sparkles,
+  CheckSquare,
+  Square
 } from "lucide-react";
 import {
   Bar,
@@ -80,6 +84,10 @@ export const EmployeesView: React.FC = () => {
   const [permissionProjectId, setPermissionProjectId] = useState("");
   const [permissionSet, setPermissionSet] = useState<Record<string, boolean>>({});
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
+  const [productAccessData, setProductAccessData] = useState<any>(null);
+  const [productAccessLoading, setProductAccessLoading] = useState(false);
+  const [productAccessSaving, setProductAccessSaving] = useState(false);
+  const [productAccessSearch, setProductAccessSearch] = useState("");
   const [tab, setTab] = useState("overview");
 
   // Modals
@@ -193,8 +201,46 @@ export const EmployeesView: React.FC = () => {
         setPermissionSet((a?.permissionSet || {}) as Record<string, boolean>);
         setAccount({ username: pd.account?.username || emp.mobile || "", password: "", roleCode: pd.account?.roleCode || "visitor" });
       }
+
+      await loadProductAccess(emp.id);
     } catch (err) {
       console.error("Error opening employee profile:", err);
+    }
+  };
+
+  const loadProductAccess = async (empId: string) => {
+    setProductAccessLoading(true);
+    try {
+      const res = await fetch(`/api/employees/${empId}/product-access`).then((r) => r.json());
+      if (res.success && res.data) {
+        setProductAccessData(res.data);
+      }
+    } catch (err) {
+      console.error("Error loading product access:", err);
+    } finally {
+      setProductAccessLoading(false);
+    }
+  };
+
+  const saveProductAccess = async () => {
+    if (!selected || !productAccessData) return;
+    setProductAccessSaving(true);
+    try {
+      const res = await fetch(`/api/employees/${selected.id}/product-access`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          canSellAllProducts: productAccessData.canSellAllProducts,
+          allowedProductIds: productAccessData.allowedProductIds || [],
+          allowedSpecialProductIds: productAccessData.allowedSpecialProductIds || [],
+        }),
+      }).then((r) => r.json());
+      if (!res.success) return alert(res.error || "خطا در ذخیره دسترسی کالاها");
+      alert("دسترسی کالاها و محصولات اختصاصی همکار با موفقیت ذخیره شد.");
+    } catch (err: any) {
+      alert(err.message || "خطا در ارتباط با سرور");
+    } finally {
+      setProductAccessSaving(false);
     }
   };
 
@@ -588,6 +634,7 @@ export const EmployeesView: React.FC = () => {
                 ["open", "موارد باز", Clock3],
                 ["timeline", "لاگ و فعالیت", Clock3],
                 ["access", "پروژه‌ها و دسترسی", ShieldCheck],
+                ["product_access", "دسترسی کالاها و محصولات", Package],
               ].map(([id, l, I]: any) => (
                 <button
                   key={id}
@@ -1019,6 +1066,285 @@ export const EmployeesView: React.FC = () => {
                     ذخیره سطوح دسترسی پروژه
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Product Access Tab */}
+            {tab === "product_access" && (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-5">
+                <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between border-b border-slate-800 pb-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Package className="h-5 w-5 text-cyan-400" />
+                      مدیریت دسترسی کالاهای قابل فروش ویزیتور / همکار
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      تعیین کنید این همکار در زمان صدور فاکتور، به کدام کالاهای کاتالوگ و کدام محصولات اختصاصی دسترسی داشته باشد.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={saveProductAccess}
+                    disabled={productAccessSaving}
+                    className="rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-600/30 hover:opacity-90 transition flex items-center gap-2 shrink-0 self-start md:self-auto"
+                  >
+                    <Save className="h-4 w-4" />
+                    {productAccessSaving ? "در حال ذخیره..." : "ذخیره دسترسی‌های فروش کالا"}
+                  </button>
+                </div>
+
+                {productAccessLoading ? (
+                  <div className="p-8 text-center text-xs text-slate-400">در حال بارگذاری لیست کالاها و دسترسی‌ها...</div>
+                ) : !productAccessData ? (
+                  <div className="p-8 text-center text-xs text-slate-500">اطلاعاتی یافت نشد.</div>
+                ) : (
+                  <div className="space-y-5">
+                    {/* Master Switch */}
+                    <div className="rounded-2xl bg-slate-950 border border-slate-800 p-4 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-white flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                          دسترسی کامل و نامحدود به تمامی کالاها
+                        </span>
+                        <p className="text-[11px] text-slate-400">
+                          در صورت فعال بودن، این همکار می‌تواند برای تمامی کالاهای کاتالوگ و تمامی محصولات اختصاصی فاکتور صادر نماید.
+                        </p>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={productAccessData.canSellAllProducts}
+                          onChange={(e) =>
+                            setProductAccessData({
+                              ...productAccessData,
+                              canSellAllProducts: e.target.checked,
+                            })
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+
+                    {!productAccessData.canSellAllProducts && (
+                      <div className="space-y-5">
+                        {/* Search Filter */}
+                        <div className="relative">
+                          <Search className="absolute right-3.5 top-3 h-4 w-4 text-slate-500" />
+                          <input
+                            type="text"
+                            placeholder="جستجو در بین نام کالاها، کد کالا یا دسته‌بندی..."
+                            value={productAccessSearch}
+                            onChange={(e) => setProductAccessSearch(e.target.value)}
+                            className="w-full rounded-xl bg-slate-950 border border-slate-800 pr-10 pl-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-cyan-500"
+                          />
+                        </div>
+
+                        {/* Section 1: Special Products */}
+                        <div className="space-y-3 rounded-2xl bg-slate-950/70 border border-purple-900/40 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="h-4 w-4 text-purple-400" />
+                              <h5 className="text-xs font-bold text-white">
+                                محصولات اختصاصی (Special Products)
+                              </h5>
+                              <span className="rounded-full bg-purple-950 border border-purple-500/40 px-2 py-0.5 text-[10px] text-purple-300 font-bold font-mono">
+                                {(productAccessData.allSpecialProducts || []).length} مورد
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allSpIds = (productAccessData.allSpecialProducts || []).map((p: any) => p.id);
+                                  setProductAccessData({
+                                    ...productAccessData,
+                                    allowedSpecialProductIds: allSpIds,
+                                  });
+                                }}
+                                className="text-purple-400 hover:text-purple-300 font-semibold"
+                              >
+                                انتخاب همه
+                              </button>
+                              <span className="text-slate-600">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setProductAccessData({
+                                    ...productAccessData,
+                                    allowedSpecialProductIds: [],
+                                  });
+                                }}
+                                className="text-slate-400 hover:text-white"
+                              >
+                                لغو همه
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {(productAccessData.allSpecialProducts || [])
+                              .filter((sp: any) => {
+                                if (!productAccessSearch.trim()) return true;
+                                const q = productAccessSearch.toLowerCase();
+                                return (
+                                  sp.name?.toLowerCase().includes(q) ||
+                                  sp.code?.toLowerCase().includes(q) ||
+                                  sp.category?.toLowerCase().includes(q)
+                                );
+                              })
+                              .map((sp: any) => {
+                                const isChecked = (productAccessData.allowedSpecialProductIds || []).includes(sp.id);
+                                return (
+                                  <label
+                                    key={sp.id}
+                                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-xs cursor-pointer transition ${
+                                      isChecked
+                                        ? "bg-purple-950/40 border-purple-500/60 text-white"
+                                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const current = productAccessData.allowedSpecialProductIds || [];
+                                        const next = e.target.checked
+                                          ? [...current, sp.id]
+                                          : current.filter((id: string) => id !== sp.id);
+                                        setProductAccessData({
+                                          ...productAccessData,
+                                          allowedSpecialProductIds: next,
+                                        });
+                                      }}
+                                      className="mt-0.5 rounded text-purple-600 h-4 w-4"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="font-bold truncate text-slate-100">{sp.name}</span>
+                                        <span className="text-[10px] text-purple-400 font-mono font-bold shrink-0">{sp.code}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                                        <span>دسته: {sp.category || "اختصاصی"}</span>
+                                        <span className="font-mono text-emerald-400 font-semibold">
+                                          {formatMoney(sp.basePrice)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            {(productAccessData.allSpecialProducts || []).length === 0 && (
+                              <p className="text-xs text-slate-500 col-span-3 text-center py-4">
+                                هنوز هیچ محصول اختصاصی در سیستم ثبت نشده است.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Section 2: Catalog Products */}
+                        <div className="space-y-3 rounded-2xl bg-slate-950/70 border border-slate-800 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-cyan-400" />
+                              <h5 className="text-xs font-bold text-white">
+                                کالاهای کاتالوگ سازمانی و کارخانه‌ای
+                              </h5>
+                              <span className="rounded-full bg-slate-900 border border-slate-700 px-2 py-0.5 text-[10px] text-cyan-300 font-bold font-mono">
+                                {(productAccessData.allProducts || []).length} مورد
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allPrdIds = (productAccessData.allProducts || []).map((p: any) => p.id);
+                                  setProductAccessData({
+                                    ...productAccessData,
+                                    allowedProductIds: allPrdIds,
+                                  });
+                                }}
+                                className="text-cyan-400 hover:text-cyan-300 font-semibold"
+                              >
+                                انتخاب همه
+                              </button>
+                              <span className="text-slate-600">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setProductAccessData({
+                                    ...productAccessData,
+                                    allowedProductIds: [],
+                                  });
+                                }}
+                                className="text-slate-400 hover:text-white"
+                              >
+                                لغو همه
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {(productAccessData.allProducts || [])
+                              .filter((p: any) => {
+                                if (!productAccessSearch.trim()) return true;
+                                const q = productAccessSearch.toLowerCase();
+                                return (
+                                  p.name?.toLowerCase().includes(q) ||
+                                  p.code?.toLowerCase().includes(q) ||
+                                  p.category?.toLowerCase().includes(q)
+                                );
+                              })
+                              .map((p: any) => {
+                                const isChecked = (productAccessData.allowedProductIds || []).includes(p.id);
+                                return (
+                                  <label
+                                    key={p.id}
+                                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-xs cursor-pointer transition ${
+                                      isChecked
+                                        ? "bg-cyan-950/40 border-cyan-500/60 text-white"
+                                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const current = productAccessData.allowedProductIds || [];
+                                        const next = e.target.checked
+                                          ? [...current, p.id]
+                                          : current.filter((id: string) => id !== p.id);
+                                        setProductAccessData({
+                                          ...productAccessData,
+                                          allowedProductIds: next,
+                                        });
+                                      }}
+                                      className="mt-0.5 rounded text-cyan-600 h-4 w-4"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="font-bold truncate text-slate-100">{p.name}</span>
+                                        <span className="text-[10px] text-cyan-400 font-mono font-bold shrink-0">{p.code}</span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                                        <span>دسته: {p.category || "عمومی"}</span>
+                                        <span className="font-mono text-emerald-400 font-semibold">
+                                          {formatMoney(p.basePrice)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

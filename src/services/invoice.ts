@@ -4,6 +4,7 @@ import {
   invoices,
   invoiceItems,
   products,
+  specialProducts,
   customers,
   employees,
   payments,
@@ -22,6 +23,8 @@ import { logAuditEvent } from "./audit";
 
 export interface CreateInvoiceItemInput {
   productId?: string | null;
+  specialProductId?: string | null;
+  productType?: "product" | "special_product" | "custom";
   productName?: string;
   productNameSnapshot?: string;
   isCustom?: boolean;
@@ -94,23 +97,159 @@ export async function createInvoice(input: CreateInvoiceInput) {
     // Process and validate items
     const processedItems = [];
     for (const itemInput of input.items) {
-      const isCustomItem = Boolean(itemInput.isCustom || !itemInput.productId);
       const qty = Number(itemInput.quantity);
       if (!Number.isFinite(qty) || qty <= 0) {
         throw new Error("مقدار هر قلم باید عددی معتبر و بزرگتر از صفر باشد.");
       }
       const disc = Number(itemInput.discountAmount || 0);
 
-      if (isCustomItem) {
-        // Custom / Manual product item
-        const customName = (itemInput.productName || itemInput.productNameSnapshot || "کالای سفارشی / متفرقه").trim();
-        const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : 0;
+      // Check if item is a Special Product (from specialProducts table)
+      let specialProd = null;
+      if (itemInput.specialProductId || itemInput.productType === "special_product") {
+        const [sp] = await tx
+          .select()
+          .from(specialProducts)
+          .where(eq(specialProducts.id, itemInput.specialProductId || itemInput.productId!))
+          .limit(1);
+        specialProd = sp || null;
+      }
+
+      if (specialProd) {
+        // Special Product Item
+        const spName = specialProd.name;
+        const spUnit = specialProd.unit || "عدد";
+        const spCode = specialProd.code;
+        const unitPrice =
+          itemInput.unitPrice !== undefined
+            ? Number(itemInput.unitPrice)
+            : Number(specialProd.basePrice) || 0;
         if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-          throw new Error(`قیمت واحد کالای سفارشی «${customName}» نامعتبر است.`);
+          throw new Error(`قیمت واحد محصول اختصاصی «${spName}» نامعتبر است.`);
         }
         if (disc > qty * unitPrice) {
-          throw new Error(`تخفیف کالای «${customName}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+          throw new Error(`تخفیف محصول اختصاصی «${spName}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
         }
+        const unitCost = 0;
+        const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+        const lineCogs = 0;
+        const lineProfit = lineTotal;
+
+        subtotal += qty * unitPrice;
+        lineDiscountsTotal += disc;
+        cogsTotal += lineCogs;
+
+        processedItems.push({
+          productId: null,
+          specialProductId: specialProd.id,
+          productNameSnapshot: spName,
+          isCustom: false,
+          customUnit: spUnit,
+          customNotes: spCode ? `[${spCode}]` : null,
+          quantity: qty,
+          unitPrice,
+          unitCostSnapshot: unitCost,
+          discountAmount: disc,
+          lineTotal,
+          lineCogs,
+          lineProfit,
+          isSpecial: true,
+        });
+
+        // Deduct stock in specialProducts if stock exists
+        if (Number(specialProd.stockQuantity) > 0) {
+          const newStock = Math.max(0, Number(specialProd.stockQuantity) - qty);
+          await tx
+            .update(specialProducts)
+            .set({ stockQuantity: String(newStock), updatedAt: new Date() })
+            .where(eq(specialProducts.id, specialProd.id));
+        }
+      } else if (itemInput.productId) {
+        // Check standard catalog product first, or fallback to special product check
+        const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId)).limit(1);
+        if (product) {
+          const resolvedPrice = await resolveProductPrice(product.id, input.projectId);
+          const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : resolvedPrice.effectivePrice;
+          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است.`);
+          }
+          if (disc > qty * unitPrice) {
+            throw new Error(`تخفیف محصول «${product.name}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+          }
+          const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
+          const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+          const lineCogs = Math.round(qty * unitCost * 100) / 100;
+          const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+
+          subtotal += qty * unitPrice;
+          lineDiscountsTotal += disc;
+          cogsTotal += lineCogs;
+
+          processedItems.push({
+            productId: product.id,
+            specialProductId: null,
+            productNameSnapshot: product.name,
+            isCustom: false,
+            customUnit: product.unit || "عدد",
+            customNotes: null,
+            quantity: qty,
+            unitPrice,
+            unitCostSnapshot: unitCost,
+            discountAmount: disc,
+            lineTotal,
+            lineCogs,
+            lineProfit,
+            isSpecial: false,
+          });
+        } else {
+          // Check if productId actually belongs to specialProducts
+          const [sp] = await tx.select().from(specialProducts).where(eq(specialProducts.id, itemInput.productId)).limit(1);
+          if (sp) {
+            const spName = sp.name;
+            const spUnit = sp.unit || "عدد";
+            const spCode = sp.code;
+            const unitPrice =
+              itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : Number(sp.basePrice) || 0;
+            const unitCost = 0;
+            const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+            const lineCogs = 0;
+            const lineProfit = lineTotal;
+
+            subtotal += qty * unitPrice;
+            lineDiscountsTotal += disc;
+            cogsTotal += lineCogs;
+
+            processedItems.push({
+              productId: null,
+              specialProductId: sp.id,
+              productNameSnapshot: spName,
+              isCustom: false,
+              customUnit: spUnit,
+              customNotes: spCode ? `[${spCode}]` : null,
+              quantity: qty,
+              unitPrice,
+              unitCostSnapshot: unitCost,
+              discountAmount: disc,
+              lineTotal,
+              lineCogs,
+              lineProfit,
+              isSpecial: true,
+            });
+
+            if (Number(sp.stockQuantity) > 0) {
+              const newStock = Math.max(0, Number(sp.stockQuantity) - qty);
+              await tx
+                .update(specialProducts)
+                .set({ stockQuantity: String(newStock), updatedAt: new Date() })
+                .where(eq(specialProducts.id, sp.id));
+            }
+          } else {
+            throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
+          }
+        }
+      } else {
+        // Fallback for custom/legacy item
+        const customName = (itemInput.productName || itemInput.productNameSnapshot || "کالای متفرقه").trim();
+        const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : 0;
         const unitCost = Number(itemInput.unitCost || 0);
         const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
         const lineCogs = Math.round(qty * unitCost * 100) / 100;
@@ -122,6 +261,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
 
         processedItems.push({
           productId: null,
+          specialProductId: null,
           productNameSnapshot: customName,
           isCustom: true,
           customUnit: itemInput.customUnit || itemInput.unit || "عدد",
@@ -133,42 +273,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
           lineTotal,
           lineCogs,
           lineProfit,
-        });
-      } else {
-        // Standard catalog product
-        const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId!)).limit(1);
-        if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
-
-        const resolvedPrice = await resolveProductPrice(product.id, input.projectId);
-        const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : resolvedPrice.effectivePrice;
-        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-          throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است.`);
-        }
-        if (disc > qty * unitPrice) {
-          throw new Error(`تخفیف محصول «${product.name}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
-        }
-        const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
-        const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
-        const lineCogs = Math.round(qty * unitCost * 100) / 100;
-        const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
-
-        subtotal += qty * unitPrice;
-        lineDiscountsTotal += disc;
-        cogsTotal += lineCogs;
-
-        processedItems.push({
-          productId: product.id,
-          productNameSnapshot: product.name,
-          isCustom: false,
-          customUnit: product.unit || "عدد",
-          customNotes: null,
-          quantity: qty,
-          unitPrice,
-          unitCostSnapshot: unitCost,
-          discountAmount: disc,
-          lineTotal,
-          lineCogs,
-          lineProfit,
+          isSpecial: false,
         });
       }
     }
@@ -612,22 +717,137 @@ export async function updateInvoice(
       const effectiveProjectId = patch.projectId !== undefined ? patch.projectId : existing.projectId;
 
       for (const itemInput of input.items) {
-        const isCustomItem = Boolean(itemInput.isCustom || !itemInput.productId);
         const qty = Number(itemInput.quantity);
         if (!Number.isFinite(qty) || qty <= 0) {
           throw new Error("مقدار هر قلم باید عددی معتبر و بزرگتر از صفر باشد.");
         }
         const disc = Number(itemInput.discountAmount || 0);
 
-        if (isCustomItem) {
-          const customName = (itemInput.productName || itemInput.productNameSnapshot || "کالای سفارشی / متفرقه").trim();
-          const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : 0;
+        let specialProd = null;
+        if (itemInput.specialProductId || itemInput.productType === "special_product") {
+          const [sp] = await tx
+            .select()
+            .from(specialProducts)
+            .where(eq(specialProducts.id, itemInput.specialProductId || itemInput.productId!))
+            .limit(1);
+          specialProd = sp || null;
+        }
+
+        if (specialProd) {
+          const spName = specialProd.name;
+          const spUnit = specialProd.unit || "عدد";
+          const spCode = specialProd.code;
+          const unitPrice =
+            itemInput.unitPrice !== undefined
+              ? Number(itemInput.unitPrice)
+              : Number(specialProd.basePrice) || 0;
           if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-            throw new Error(`قیمت واحد کالای سفارشی «${customName}» نامعتبر است.`);
+            throw new Error(`قیمت واحد محصول اختصاصی «${spName}» نامعتبر است.`);
           }
           if (disc > qty * unitPrice) {
-            throw new Error(`تخفیف کالای «${customName}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+            throw new Error(`تخفیف محصول اختصاصی «${spName}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
           }
+          const unitCost = 0;
+          const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+          const lineCogs = 0;
+          const lineProfit = lineTotal;
+
+          subtotal += qty * unitPrice;
+          lineDiscountsTotal += disc;
+          cogsTotal += lineCogs;
+
+          processedItems.push({
+            productId: null,
+            specialProductId: specialProd.id,
+            productNameSnapshot: spName,
+            isCustom: false,
+            customUnit: spUnit,
+            customNotes: spCode ? `[${spCode}]` : null,
+            quantity: qty,
+            unitPrice,
+            unitCostSnapshot: unitCost,
+            discountAmount: disc,
+            lineTotal,
+            lineCogs,
+            lineProfit,
+            isSpecial: true,
+          });
+        } else if (itemInput.productId) {
+          const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId!)).limit(1);
+          if (product) {
+            const resolvedPrice = await resolveProductPrice(product.id, effectiveProjectId);
+            const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : resolvedPrice.effectivePrice;
+            if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+              throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است.`);
+            }
+            if (disc > qty * unitPrice) {
+              throw new Error(`تخفیف محصول «${product.name}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+            }
+            const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
+            const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+            const lineCogs = Math.round(qty * unitCost * 100) / 100;
+            const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+
+            subtotal += qty * unitPrice;
+            lineDiscountsTotal += disc;
+            cogsTotal += lineCogs;
+
+            processedItems.push({
+              productId: product.id,
+              specialProductId: null,
+              productNameSnapshot: product.name,
+              isCustom: false,
+              customUnit: product.unit || "عدد",
+              customNotes: null,
+              quantity: qty,
+              unitPrice,
+              unitCostSnapshot: unitCost,
+              discountAmount: disc,
+              lineTotal,
+              lineCogs,
+              lineProfit,
+              isSpecial: false,
+            });
+          } else {
+            const [sp] = await tx.select().from(specialProducts).where(eq(specialProducts.id, itemInput.productId)).limit(1);
+            if (sp) {
+              const spName = sp.name;
+              const spUnit = sp.unit || "عدد";
+              const spCode = sp.code;
+              const unitPrice =
+                itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : Number(sp.basePrice) || 0;
+              const unitCost = 0;
+              const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+              const lineCogs = 0;
+              const lineProfit = lineTotal;
+
+              subtotal += qty * unitPrice;
+              lineDiscountsTotal += disc;
+              cogsTotal += lineCogs;
+
+              processedItems.push({
+                productId: null,
+                specialProductId: sp.id,
+                productNameSnapshot: spName,
+                isCustom: false,
+                customUnit: spUnit,
+                customNotes: spCode ? `[${spCode}]` : null,
+                quantity: qty,
+                unitPrice,
+                unitCostSnapshot: unitCost,
+                discountAmount: disc,
+                lineTotal,
+                lineCogs,
+                lineProfit,
+                isSpecial: true,
+              });
+            } else {
+              throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
+            }
+          }
+        } else {
+          const customName = (itemInput.productName || itemInput.productNameSnapshot || "کالای متفرقه").trim();
+          const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : 0;
           const unitCost = Number(itemInput.unitCost || 0);
           const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
           const lineCogs = Math.round(qty * unitCost * 100) / 100;
@@ -639,6 +859,7 @@ export async function updateInvoice(
 
           processedItems.push({
             productId: null,
+            specialProductId: null,
             productNameSnapshot: customName,
             isCustom: true,
             customUnit: itemInput.customUnit || itemInput.unit || "عدد",
@@ -650,41 +871,7 @@ export async function updateInvoice(
             lineTotal,
             lineCogs,
             lineProfit,
-          });
-        } else {
-          const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId!)).limit(1);
-          if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
-
-          const resolvedPrice = await resolveProductPrice(product.id, effectiveProjectId);
-          const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : resolvedPrice.effectivePrice;
-          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-            throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است.`);
-          }
-          if (disc > qty * unitPrice) {
-            throw new Error(`تخفیف محصول «${product.name}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
-          }
-          const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
-          const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
-          const lineCogs = Math.round(qty * unitCost * 100) / 100;
-          const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
-
-          subtotal += qty * unitPrice;
-          lineDiscountsTotal += disc;
-          cogsTotal += lineCogs;
-
-          processedItems.push({
-            productId: product.id,
-            productNameSnapshot: product.name,
-            isCustom: false,
-            customUnit: product.unit || "عدد",
-            customNotes: null,
-            quantity: qty,
-            unitPrice,
-            unitCostSnapshot: unitCost,
-            discountAmount: disc,
-            lineTotal,
-            lineCogs,
-            lineProfit,
+            isSpecial: false,
           });
         }
       }
