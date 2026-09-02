@@ -899,6 +899,11 @@ export async function migrateDatabase() {
     ALTER TABLE invoices ADD COLUMN IF NOT EXISTS commission_snapshot JSONB;
     ALTER TABLE invoices ADD COLUMN IF NOT EXISTS price_snapshot JSONB;
 
+    ALTER TABLE invoice_items ALTER COLUMN product_id DROP NOT NULL;
+    ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS is_custom BOOLEAN DEFAULT false;
+    ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS custom_unit TEXT DEFAULT 'عدد';
+    ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS custom_notes TEXT;
+
     INSERT INTO employee_project_assignments(employee_id, project_id, role, started_at, status)
       SELECT epm.employee_id, epm.project_id, 'member', epm.assigned_at, 'active'
       FROM employee_project_memberships epm

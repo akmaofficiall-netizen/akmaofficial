@@ -64,10 +64,10 @@ export async function createRawMaterial(input: CreateRawMaterialInput) {
   }
 
   const supplierIdValue = input.supplierId && input.supplierId.trim().length > 0 ? input.supplierId.trim() : null;
-  const cost = Number(input.currentCost) >= 0 ? Number(input.currentCost) : 0;
-  const stockQty = Number(input.stockQuantity) >= 0 ? Number(input.stockQuantity) : 0;
-  const minStockQty = Number(input.minStockQuantity) >= 0 ? Number(input.minStockQuantity) : 10;
-  const conversionFactor = Number(input.unitConversionFactor) > 0 ? Number(input.unitConversionFactor) : 1;
+  const cost = Number.isFinite(Number(input.currentCost)) && Number(input.currentCost) >= 0 ? Number(input.currentCost) : 0;
+  const stockQty = Number.isFinite(Number(input.stockQuantity)) && Number(input.stockQuantity) >= 0 ? Number(input.stockQuantity) : 0;
+  const minStockQty = Number.isFinite(Number(input.minStockQuantity)) && Number(input.minStockQuantity) >= 0 ? Number(input.minStockQuantity) : 10;
+  const conversionFactor = Number.isFinite(Number(input.unitConversionFactor)) && Number(input.unitConversionFactor) > 0 ? Number(input.unitConversionFactor) : 1;
 
   const [rm] = await db
     .insert(rawMaterials)
@@ -308,8 +308,13 @@ export async function adjustRawMaterialStock(
   const [rm] = await db.select().from(rawMaterials).where(eq(rawMaterials.id, rawMaterialId)).limit(1);
   if (!rm) throw new Error("ماده اولیه پیدا نشد");
 
+  const targetQty = Number(newQuantity);
+  if (!Number.isFinite(targetQty) || targetQty < 0) {
+    throw new Error("مقدار جدید موجودی باید عددی معتبر و بزرگتر یا مساوی صفر باشد.");
+  }
+
   const currentStock = Number(rm.stockQuantity) || 0;
-  const delta = newQuantity - currentStock;
+  const delta = Math.round((targetQty - currentStock) * 10000) / 10000;
 
   if (delta === 0) return rm;
 
@@ -320,7 +325,7 @@ export async function adjustRawMaterialStock(
     quantityChange: delta,
     unitCostSnapshot: Number(rm.currentCost) || 0,
     referenceType: "manual_adjustment",
-    notes: `تعدیل دستی موجودی: ${reason} (قبلی: ${currentStock}، جدید: ${newQuantity})`,
+    notes: `تعدیل دستی موجودی: ${reason} (قبلی: ${currentStock}، جدید: ${targetQty})`,
   });
 
   return (await db.select().from(rawMaterials).where(eq(rawMaterials.id, rawMaterialId)).limit(1))[0];

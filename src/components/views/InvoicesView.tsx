@@ -31,7 +31,19 @@ import {
 import { toJalaliDate, formatMoney, formatMoneyDual, formatRial, formatNumber } from "@/lib/dateUtils";
 import { numberToPersianWords } from "@/lib/numberToWords";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
 import { triggerInvoicePrint, downloadInvoiceJpg } from "@/lib/invoicePrintHelper";
+
+export interface InvoiceItemFormItem {
+  productId?: string | null;
+  isCustom?: boolean;
+  productName?: string;
+  customUnit?: string;
+  customNotes?: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+}
 
 export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ selectedProjectId }) => {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -64,10 +76,10 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     customerId: "",
     projectId: "",
     employeeId: "",
-    invoiceDate: "",
-    dueDate: "",
+    invoiceDate: null as Date | null,
+    dueDate: null as Date | null,
     invoiceDiscount: 0,
-    items: [] as { productId: string; quantity: number; unitPrice: number; discountAmount: number }[],
+    items: [] as InvoiceItemFormItem[],
     notes: "",
   });
 
@@ -88,8 +100,10 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     projectId: selectedProjectId || "",
     salesMode: "direct",
     employeeId: "",
+    invoiceDate: new Date() as Date | null,
+    dueDate: null as Date | null,
     invoiceDiscount: 0,
-    items: [] as { productId: string; quantity: number; unitPrice: number; discountAmount: number }[],
+    items: [] as InvoiceItemFormItem[],
     initialPaymentAmount: 0,
     initialPaymentAccountId: "",
     notes: "",
@@ -189,10 +203,12 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       projectId: defaultProjId,
       salesMode: "direct",
       employeeId: defaultCust?.assignedEmployeeId || "",
+      invoiceDate: new Date(),
+      dueDate: null,
       invoiceDiscount: 0,
       items: products.length > 0
-        ? [{ productId: products[0].id, quantity: 1, unitPrice: products[0].effectivePrice ?? products[0].basePrice, discountAmount: 0 }]
-        : [],
+        ? [{ isCustom: false, productId: products[0].id, quantity: 1, unitPrice: products[0].effectivePrice ?? products[0].basePrice, discountAmount: 0 }]
+        : [{ isCustom: true, productName: "", customUnit: "عدد", customNotes: "", quantity: 1, unitPrice: 0, discountAmount: 0 }],
       initialPaymentAmount: 0,
       initialPaymentAccountId: accounts[0]?.id || "",
       notes: "",
@@ -209,6 +225,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     const updated = [...form.items];
     updated[index] = {
       ...updated[index],
+      isCustom: false,
       productId,
       unitPrice: prod.effectivePrice ?? prod.basePrice,
     };
@@ -216,20 +233,72 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   };
 
   const addLineItem = () => {
-    if (products.length === 0) return;
-    const defaultProd = products[0];
+    if (products.length > 0) {
+      const defaultProd = products[0];
+      setForm({
+        ...form,
+        items: [
+          ...form.items,
+          {
+            isCustom: false,
+            productId: defaultProd.id,
+            quantity: 1,
+            unitPrice: defaultProd.effectivePrice ?? defaultProd.basePrice,
+            discountAmount: 0,
+          },
+        ],
+      });
+    } else {
+      addCustomLineItem();
+    }
+  };
+
+  const addCustomLineItem = () => {
     setForm({
       ...form,
       items: [
         ...form.items,
         {
-          productId: defaultProd.id,
+          isCustom: true,
+          productId: null,
+          productName: "",
+          customUnit: "عدد",
+          customNotes: "",
           quantity: 1,
-          unitPrice: defaultProd.effectivePrice ?? defaultProd.basePrice,
+          unitPrice: 0,
           discountAmount: 0,
         },
       ],
     });
+  };
+
+  const toggleLineItemType = (index: number) => {
+    const item = form.items[index];
+    const isNowCustom = !item.isCustom;
+    const updated = [...form.items];
+    if (isNowCustom) {
+      const currentProd = products.find((p) => p.id === item.productId);
+      updated[index] = {
+        isCustom: true,
+        productId: null,
+        productName: currentProd?.name || "",
+        customUnit: currentProd?.unit || "عدد",
+        customNotes: "",
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || 0,
+        discountAmount: item.discountAmount || 0,
+      };
+    } else {
+      const defaultProd = products[0];
+      updated[index] = {
+        isCustom: false,
+        productId: defaultProd?.id || "",
+        quantity: item.quantity || 1,
+        unitPrice: defaultProd ? (defaultProd.effectivePrice ?? defaultProd.basePrice) : item.unitPrice || 0,
+        discountAmount: item.discountAmount || 0,
+      };
+    }
+    setForm({ ...form, items: updated });
   };
 
   const removeLineItem = (index: number) => {
@@ -246,6 +315,15 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       return;
     }
 
+    // Validate custom items have names
+    for (let i = 0; i < form.items.length; i++) {
+      const it = form.items[i];
+      if (it.isCustom && !it.productName?.trim()) {
+        alert(`لطفاً نام کالای سفارشی در سطر شماره ${i + 1} را وارد کنید.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload: any = {
@@ -253,8 +331,19 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
         projectId: form.projectId || null,
         salesMode: form.salesMode,
         employeeId: form.employeeId || null,
+        invoiceDate: form.invoiceDate ? form.invoiceDate.toISOString() : undefined,
+        dueDate: form.dueDate ? form.dueDate.toISOString() : undefined,
         invoiceDiscount: form.invoiceDiscount,
-        items: form.items,
+        items: form.items.map((it) => ({
+          productId: it.isCustom ? null : it.productId,
+          isCustom: !!it.isCustom,
+          productName: it.productName,
+          customUnit: it.customUnit,
+          customNotes: it.customNotes,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          discountAmount: it.discountAmount || 0,
+        })),
         notes: form.notes,
       };
 
@@ -297,19 +386,23 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       customerId: res.invoice.customerId || "",
       projectId: res.invoice.projectId || "",
       employeeId: res.invoice.employeeId || "",
-      invoiceDate: res.invoice.invoiceDate ? String(res.invoice.invoiceDate).slice(0, 10) : "",
-      dueDate: res.invoice.dueDate ? String(res.invoice.dueDate).slice(0, 10) : "",
+      invoiceDate: res.invoice.invoiceDate ? new Date(res.invoice.invoiceDate) : null,
+      dueDate: res.invoice.dueDate ? new Date(res.invoice.dueDate) : null,
       invoiceDiscount: Number(res.invoice.invoiceDiscount) || 0,
       items: res.items && res.items.length > 0
         ? res.items.map((i: any) => ({
-            productId: i.productId,
+            productId: i.productId || null,
+            isCustom: !!i.isCustom || !i.productId,
+            productName: i.productNameSnapshot || i.productName || "",
+            customUnit: i.productUnit || i.customUnit || "عدد",
+            customNotes: i.customNotes || "",
             quantity: Number(i.quantity) || 1,
             unitPrice: Number(i.unitPrice) || 0,
             discountAmount: Number(i.discountAmount) || 0,
           }))
         : products.length > 0
-        ? [{ productId: products[0].id, quantity: 1, unitPrice: products[0].effectivePrice ?? products[0].basePrice, discountAmount: 0 }]
-        : [],
+        ? [{ isCustom: false, productId: products[0].id, quantity: 1, unitPrice: products[0].effectivePrice ?? products[0].basePrice, discountAmount: 0 }]
+        : [{ isCustom: true, productName: "", customUnit: "عدد", customNotes: "", quantity: 1, unitPrice: 0, discountAmount: 0 }],
       notes: res.invoice.notes || "",
     });
   };
@@ -320,6 +413,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
     const updated = [...editForm.items];
     updated[index] = {
       ...updated[index],
+      isCustom: false,
       productId,
       unitPrice: prod.effectivePrice ?? prod.basePrice,
     };
@@ -327,20 +421,72 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
   };
 
   const addEditLineItem = () => {
-    if (products.length === 0) return;
-    const defaultProd = products[0];
+    if (products.length > 0) {
+      const defaultProd = products[0];
+      setEditForm({
+        ...editForm,
+        items: [
+          ...editForm.items,
+          {
+            isCustom: false,
+            productId: defaultProd.id,
+            quantity: 1,
+            unitPrice: defaultProd.effectivePrice ?? defaultProd.basePrice,
+            discountAmount: 0,
+          },
+        ],
+      });
+    } else {
+      addEditCustomLineItem();
+    }
+  };
+
+  const addEditCustomLineItem = () => {
     setEditForm({
       ...editForm,
       items: [
         ...editForm.items,
         {
-          productId: defaultProd.id,
+          isCustom: true,
+          productId: null,
+          productName: "",
+          customUnit: "عدد",
+          customNotes: "",
           quantity: 1,
-          unitPrice: defaultProd.effectivePrice ?? defaultProd.basePrice,
+          unitPrice: 0,
           discountAmount: 0,
         },
       ],
     });
+  };
+
+  const toggleEditLineItemType = (index: number) => {
+    const item = editForm.items[index];
+    const isNowCustom = !item.isCustom;
+    const updated = [...editForm.items];
+    if (isNowCustom) {
+      const currentProd = products.find((p) => p.id === item.productId);
+      updated[index] = {
+        isCustom: true,
+        productId: null,
+        productName: currentProd?.name || "",
+        customUnit: currentProd?.unit || "عدد",
+        customNotes: "",
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || 0,
+        discountAmount: item.discountAmount || 0,
+      };
+    } else {
+      const defaultProd = products[0];
+      updated[index] = {
+        isCustom: false,
+        productId: defaultProd?.id || "",
+        quantity: item.quantity || 1,
+        unitPrice: defaultProd ? (defaultProd.effectivePrice ?? defaultProd.basePrice) : item.unitPrice || 0,
+        discountAmount: item.discountAmount || 0,
+      };
+    }
+    setEditForm({ ...editForm, items: updated });
   };
 
   const removeEditLineItem = (index: number) => {
@@ -357,6 +503,14 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
       return;
     }
 
+    for (let i = 0; i < editForm.items.length; i++) {
+      const it = editForm.items[i];
+      if (it.isCustom && !it.productName?.trim()) {
+        alert(`لطفاً نام کالای سفارشی در سطر شماره ${i + 1} را وارد کنید.`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const res = await fetch(`/api/invoices/${editForm.id}`, {
@@ -367,10 +521,19 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
           projectId: editForm.projectId || null,
           employeeId: editForm.employeeId || null,
           manualInvoiceNumber: editForm.invoiceNumber,
-          invoiceDate: editForm.invoiceDate ? new Date(editForm.invoiceDate) : undefined,
-          dueDate: editForm.dueDate ? new Date(editForm.dueDate) : undefined,
+          invoiceDate: editForm.invoiceDate ? editForm.invoiceDate.toISOString() : undefined,
+          dueDate: editForm.dueDate ? editForm.dueDate.toISOString() : undefined,
           invoiceDiscount: editForm.invoiceDiscount,
-          items: editForm.items,
+          items: editForm.items.map((it) => ({
+            productId: it.isCustom ? null : it.productId,
+            isCustom: !!it.isCustom,
+            productName: it.productName,
+            customUnit: it.customUnit,
+            customNotes: it.customNotes,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            discountAmount: it.discountAmount || 0,
+          })),
           notes: editForm.notes,
         }),
       }).then((r) => r.json());
@@ -835,73 +998,164 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                 </div>
               </div>
 
+              {/* Jalali Dates Row */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 bg-slate-900/40 p-3.5 rounded-2xl border border-slate-800/80">
+                <JalaliDatePicker
+                  label="تاریخ صدور فاکتور (شمسی)"
+                  value={form.invoiceDate}
+                  onChange={(d) => setForm({ ...form, invoiceDate: d })}
+                  required
+                />
+                <JalaliDatePicker
+                  label="سررسید پرداخت و تسویه (شمسی)"
+                  value={form.dueDate}
+                  onChange={(d) => setForm({ ...form, dueDate: d })}
+                  placeholder="اختیاری - مثال: 1404/02/15"
+                />
+              </div>
+
               {/* Line Items Table */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-200">اقلام و کالاهای فاکتور</h4>
-                  <button
-                    type="button"
-                    onClick={addLineItem}
-                    className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-950/40 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-900/60"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    افزودن ردیف کالا
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-bold text-slate-200 flex items-center gap-2">
+                    <ShoppingBag className="h-4 w-4 text-purple-400" />
+                    اقلام و کالاهای فاکتور ({form.items.length})
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={addLineItem}
+                      className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-950/40 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-900/60 transition"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      افزودن کالا از انبار
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addCustomLineItem}
+                      className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/60 transition"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      افزودن کالای سفارشی / دستی
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto rounded-2xl border border-slate-800">
                   <table className="w-full text-right text-xs text-slate-300">
                     <thead className="bg-slate-900 text-slate-400 font-semibold">
                       <tr>
-                        <th className="p-3">ردیف</th>
-                        <th className="p-3">نام محصول</th>
-                        <th className="p-3">تعداد / مقدار</th>
-                        <th className="p-3">قیمت واحد (تومان)</th>
-                        <th className="p-3">تخفیف ردیف (تومان)</th>
-                        <th className="p-3">جمع ردیف (تومان)</th>
-                        <th className="p-3 text-center">حذف</th>
+                        <th className="p-3 text-center w-12">ردیف</th>
+                        <th className="p-3">نوع و شرح کالا / خدمات</th>
+                        <th className="p-3 text-center w-24">تعداد / مقدار</th>
+                        <th className="p-3 text-center w-36">قیمت واحد (تومان)</th>
+                        <th className="p-3 text-center w-32">تخفیف سطر (تومان)</th>
+                        <th className="p-3 text-left w-32">جمع سطر (تومان)</th>
+                        <th className="p-3 text-center w-12">حذف</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 bg-slate-950">
                       {form.items.map((item, idx) => {
                         const lineTotal = item.quantity * item.unitPrice - (item.discountAmount || 0);
-                        const prod = products.find((p) => p.id === item.productId);
+                        const prod = item.productId ? products.find((p) => p.id === item.productId) : null;
 
                         return (
-                          <tr key={idx}>
-                            <td className="p-3 font-bold text-slate-500">{idx + 1}</td>
+                          <tr key={idx} className={item.isCustom ? "bg-emerald-950/10" : ""}>
+                            <td className="p-3 font-bold text-slate-500 text-center">{idx + 1}</td>
                             <td className="p-3">
-                              <select
-                                value={item.productId}
-                                onChange={(e) => handleProductChange(idx, e.target.value)}
-                                className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white"
-                              >
-                                {products.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name} (موجودی: {formatNumber(p.stockQuantity)} {p.unit})
-                                  </option>
-                                ))}
-                              </select>
-                              {prod?.hasProjectOverride && (
-                                <span className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
-                                  <Tag className="h-2.5 w-2.5" />
-                                  نرخ ویژه پروژه اعمال شد
-                                </span>
-                              )}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${item.isCustom ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700/50" : "bg-purple-900/50 text-purple-300 border border-purple-700/50"}`}>
+                                    {item.isCustom ? "کالای سفارشی (بدون کسر انبار)" : "محصول از انبار"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleLineItemType(idx)}
+                                    className="text-[10px] text-slate-400 hover:text-cyan-300 underline underline-offset-2 transition"
+                                  >
+                                    {item.isCustom ? "تغییر به انتخاب از انبار" : "تغییر به کالای سفارشی / دستی"}
+                                  </button>
+                                </div>
+
+                                {item.isCustom ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div className="sm:col-span-2">
+                                      <input
+                                        type="text"
+                                        required
+                                        placeholder="نام کالا یا خدمات سفارشی (مثلاً: خدمات برش لیزر، پروفیل سفارشی)"
+                                        value={item.productName || ""}
+                                        onChange={(e) => {
+                                          const updated = [...form.items];
+                                          updated[idx].productName = e.target.value;
+                                          setForm({ ...form, items: updated });
+                                        }}
+                                        className="w-full rounded-xl border border-emerald-600/40 bg-slate-900 p-2 text-white placeholder:text-slate-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <input
+                                        type="text"
+                                        placeholder="واحد (عدد، کیلوگرم، متر)"
+                                        value={item.customUnit || ""}
+                                        onChange={(e) => {
+                                          const updated = [...form.items];
+                                          updated[idx].customUnit = e.target.value;
+                                          setForm({ ...form, items: updated });
+                                        }}
+                                        className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-center"
+                                      />
+                                    </div>
+                                    <div className="sm:col-span-3">
+                                      <input
+                                        type="text"
+                                        placeholder="توضیحات و مشخصات فنی کالای سفارشی (اختیاری)"
+                                        value={item.customNotes || ""}
+                                        onChange={(e) => {
+                                          const updated = [...form.items];
+                                          updated[idx].customNotes = e.target.value;
+                                          setForm({ ...form, items: updated });
+                                        }}
+                                        className="w-full rounded-xl border border-slate-800 bg-slate-900/60 p-1.5 text-[11px] text-slate-300 placeholder:text-slate-600"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <select
+                                      value={item.productId || ""}
+                                      onChange={(e) => handleProductChange(idx, e.target.value)}
+                                      className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white"
+                                    >
+                                      {products.map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                          {p.name} (موجودی: {formatNumber(p.stockQuantity)} {p.unit})
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {prod?.hasProjectOverride && (
+                                      <span className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                                        <Tag className="h-2.5 w-2.5" />
+                                        نرخ ویژه پروژه اعمال شد
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3">
                               <input
                                 type="number"
-                                min="1"
+                                min="0.001"
                                 step="any"
                                 value={item.quantity}
                                 onChange={(e) => {
-                                  const val = Number(e.target.value) || 1;
+                                  const val = Number(e.target.value) || 0;
                                   const updated = [...form.items];
                                   updated[idx].quantity = val;
                                   setForm({ ...form, items: updated });
                                 }}
-                                className="w-20 rounded-xl border border-slate-800 bg-slate-900 p-2 text-center text-white"
+                                className="w-20 rounded-xl border border-slate-800 bg-slate-900 p-2 text-center text-white mx-auto block font-mono"
                               />
                             </td>
                             <td className="p-3">
@@ -912,7 +1166,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                                   updated[idx].unitPrice = val;
                                   setForm({ ...form, items: updated });
                                 }}
-                                className="w-32 text-xs py-1.5"
+                                className="w-32 text-xs py-1.5 mx-auto"
                                 unit="تومان"
                               />
                             </td>
@@ -924,18 +1178,18 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                                   updated[idx].discountAmount = val;
                                   setForm({ ...form, items: updated });
                                 }}
-                                className="w-28 text-xs py-1.5"
+                                className="w-28 text-xs py-1.5 mx-auto"
                                 unit="تومان"
                               />
                             </td>
-                            <td className="p-3 font-mono font-bold text-white">
+                            <td className="p-3 font-mono font-bold text-white text-left">
                               {formatMoney(lineTotal)}
                             </td>
                             <td className="p-3 text-center">
                               <button
                                 type="button"
                                 onClick={() => removeLineItem(idx)}
-                                className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300"
+                                className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -1469,6 +1723,7 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                         <td className="p-2 border-r border-slate-300 font-bold text-slate-900" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>
                           {i.productNameSnapshot}
                           {i.productCode && <span className="text-[10px] text-slate-600 font-mono font-normal mr-2" style={{ color: "#334155" }}>[{i.productCode}]</span>}
+                          {i.customNotes && <div className="text-[10px] text-slate-500 font-normal mt-0.5" style={{ color: "#64748b" }}>{i.customNotes}</div>}
                         </td>
                         <td className="p-2 border-r border-slate-300 text-center font-bold font-mono text-slate-900" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{formatNumber(i.quantity)}</td>
                         <td className="p-2 border-r border-slate-300 text-center text-slate-700" style={{ borderColor: "#cbd5e1", color: "#0f172a" }}>{i.productUnit || "عدد"}</td>
@@ -1656,117 +1911,253 @@ export const InvoicesView: React.FC<{ selectedProjectId: string | null }> = ({ s
                   />
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">تاریخ فاکتور:</label>
-                  <input
-                    type="date"
+                <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <JalaliDatePicker
+                    label="تاریخ فاکتور (شمسی)"
                     value={editForm.invoiceDate}
-                    onChange={(e) => setEditForm({ ...editForm, invoiceDate: e.target.value })}
-                    className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-2.5 text-white font-mono"
+                    onChange={(d) => setEditForm({ ...editForm, invoiceDate: d })}
                   />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">سررسید تسویه:</label>
-                  <input
-                    type="date"
+                  <JalaliDatePicker
+                    label="سررسید تسویه (شمسی)"
                     value={editForm.dueDate}
-                    onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                    className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-2.5 text-white font-mono"
+                    onChange={(d) => setEditForm({ ...editForm, dueDate: d })}
+                    placeholder="اختیاری - مثال: 1404/02/15"
                   />
                 </div>
               </div>
 
               {/* Items Section */}
               <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="font-bold text-white flex items-center gap-2">
                     <ShoppingBag className="h-4 w-4 text-cyan-400" />
                     اقلام و کالاهای فاکتور ({editForm.items.length})
                   </h4>
-                  <button
-                    type="button"
-                    onClick={addEditLineItem}
-                    className="flex items-center gap-1 rounded-xl bg-cyan-600/20 px-3 py-1.5 font-bold text-cyan-400 hover:bg-cyan-600/30 transition border border-cyan-500/30"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    افزودن سطر کالا
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={addEditLineItem}
+                      className="flex items-center gap-1 rounded-xl bg-cyan-600/20 px-3 py-1.5 font-bold text-cyan-400 hover:bg-cyan-600/30 transition border border-cyan-500/30"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      افزودن کالا از انبار
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addEditCustomLineItem}
+                      className="flex items-center gap-1 rounded-xl bg-emerald-600/20 px-3 py-1.5 font-bold text-emerald-400 hover:bg-emerald-600/30 transition border border-emerald-500/30"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      افزودن کالای سفارشی / دستی
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  {editForm.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-center rounded-xl bg-slate-950 p-2.5 border border-slate-800">
-                      <div className="col-span-4">
-                        <label className="block text-[10px] text-slate-400 mb-0.5">محصول</label>
-                        <select
-                          value={item.productId}
-                          onChange={(e) => handleEditProductChange(index, e.target.value)}
-                          className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs"
-                        >
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} ({formatMoney(p.effectivePrice ?? p.basePrice)})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                <div className="space-y-3">
+                  {editForm.items.map((item, index) => {
+                    const lineTotal = item.quantity * item.unitPrice - (item.discountAmount || 0);
+                    const prod = item.productId ? products.find((p) => p.id === item.productId) : null;
 
-                      <div className="col-span-2">
-                        <label className="block text-[10px] text-slate-400 mb-0.5">تعداد</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const updated = [...editForm.items];
-                            updated[index].quantity = Number(e.target.value);
-                            setEditForm({ ...editForm, items: updated });
-                          }}
-                          className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center"
-                        />
-                      </div>
+                    return (
+                      <div
+                        key={index}
+                        className={`rounded-2xl p-3 border transition ${item.isCustom ? "bg-emerald-950/20 border-emerald-800/40" : "bg-slate-950 border-slate-800"}`}
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-500 text-xs">#{index + 1}</span>
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${item.isCustom ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700/60" : "bg-purple-900/60 text-purple-300 border border-purple-700/60"}`}
+                            >
+                              {item.isCustom ? "کالای سفارشی / خدمات (بدون کسر انبار)" : "کالای انبار سیستمی"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleEditLineItemType(index)}
+                              className="text-[11px] text-slate-400 hover:text-cyan-300 underline underline-offset-2 transition"
+                            >
+                              {item.isCustom ? "تبدیل به انتخاب از انبار" : "تبدیل به کالای سفارشی / دستی"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeEditLineItem(index)}
+                              className="text-rose-400 hover:text-rose-300 p-1 rounded-lg hover:bg-rose-950/50"
+                              title="حذف سطر"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
 
-                      <div className="col-span-3">
-                        <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
-                        <MoneyInput
-                          value={item.unitPrice}
-                          onChange={(val) => {
-                            const updated = [...editForm.items];
-                            updated[index].unitPrice = val;
-                            setEditForm({ ...editForm, items: updated });
-                          }}
-                          className="w-full text-xs py-1.5"
-                          unit="تومان"
-                        />
-                      </div>
+                        {item.isCustom ? (
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                              <div className="sm:col-span-6">
+                                <label className="block text-[10px] text-slate-400 mb-0.5">
+                                  نام کالا یا خدمات سفارشی <span className="text-rose-400">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="نام کالا یا خدمات سفارشی"
+                                  value={item.productName || ""}
+                                  onChange={(e) => {
+                                    const updated = [...editForm.items];
+                                    updated[index].productName = e.target.value;
+                                    setEditForm({ ...editForm, items: updated });
+                                  }}
+                                  className="w-full rounded-xl border border-emerald-600/40 bg-slate-900 p-2 text-white text-xs"
+                                />
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className="block text-[10px] text-slate-400 mb-0.5">واحد</label>
+                                <input
+                                  type="text"
+                                  placeholder="واحد"
+                                  value={item.customUnit || ""}
+                                  onChange={(e) => {
+                                    const updated = [...editForm.items];
+                                    updated[index].customUnit = e.target.value;
+                                    setEditForm({ ...editForm, items: updated });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs text-center"
+                                />
+                              </div>
+                              <div className="sm:col-span-4">
+                                <label className="block text-[10px] text-slate-400 mb-0.5">توضیحات اختیاری</label>
+                                <input
+                                  type="text"
+                                  placeholder="مشخصات و یادداشت سطر"
+                                  value={item.customNotes || ""}
+                                  onChange={(e) => {
+                                    const updated = [...editForm.items];
+                                    updated[index].customNotes = e.target.value;
+                                    setEditForm({ ...editForm, items: updated });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                              <div className="sm:col-span-3">
+                                <label className="block text-[10px] text-slate-400 mb-0.5">مقدار / تعداد</label>
+                                <input
+                                  type="number"
+                                  min="0.001"
+                                  step="any"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const updated = [...editForm.items];
+                                    updated[index].quantity = Number(e.target.value) || 0;
+                                    setEditForm({ ...editForm, items: updated });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center text-xs"
+                                />
+                              </div>
+                              <div className="sm:col-span-4">
+                                <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
+                                <MoneyInput
+                                  value={item.unitPrice}
+                                  onChange={(val) => {
+                                    const updated = [...editForm.items];
+                                    updated[index].unitPrice = val;
+                                    setEditForm({ ...editForm, items: updated });
+                                  }}
+                                  className="w-full text-xs py-1.5"
+                                  unit="تومان"
+                                />
+                              </div>
+                              <div className="sm:col-span-3">
+                                <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
+                                <MoneyInput
+                                  value={item.discountAmount}
+                                  onChange={(val) => {
+                                    const updated = [...editForm.items];
+                                    updated[index].discountAmount = val;
+                                    setEditForm({ ...editForm, items: updated });
+                                  }}
+                                  className="w-full text-xs py-1.5"
+                                  unit="تومان"
+                                />
+                              </div>
+                              <div className="sm:col-span-2 text-left pt-3">
+                                <span className="text-[10px] text-slate-400 block">جمع سطر:</span>
+                                <span className="font-mono font-bold text-white text-xs">{formatMoney(lineTotal)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                            <div className="sm:col-span-4">
+                              <label className="block text-[10px] text-slate-400 mb-0.5">انتخاب محصول</label>
+                              <select
+                                value={item.productId || ""}
+                                onChange={(e) => handleEditProductChange(index, e.target.value)}
+                                className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white text-xs"
+                              >
+                                {products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} ({formatMoney(p.effectivePrice ?? p.basePrice)})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                      <div className="col-span-2">
-                        <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
-                        <MoneyInput
-                          value={item.discountAmount}
-                          onChange={(val) => {
-                            const updated = [...editForm.items];
-                            updated[index].discountAmount = val;
-                            setEditForm({ ...editForm, items: updated });
-                          }}
-                          className="w-full text-xs py-1.5"
-                          unit="تومان"
-                        />
-                      </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] text-slate-400 mb-0.5">تعداد / مقدار</label>
+                              <input
+                                type="number"
+                                min="0.001"
+                                step="any"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const updated = [...editForm.items];
+                                  updated[index].quantity = Number(e.target.value) || 0;
+                                  setEditForm({ ...editForm, items: updated });
+                                }}
+                                className="w-full rounded-xl border border-slate-800 bg-slate-900 p-2 text-white font-mono text-center text-xs"
+                              />
+                            </div>
 
-                      <div className="col-span-1 flex justify-center pt-3">
-                        <button
-                          type="button"
-                          onClick={() => removeEditLineItem(index)}
-                          className="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-950/40"
-                          title="حذف سطر"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                            <div className="sm:col-span-3">
+                              <label className="block text-[10px] text-slate-400 mb-0.5">قیمت واحد</label>
+                              <MoneyInput
+                                value={item.unitPrice}
+                                onChange={(val) => {
+                                  const updated = [...editForm.items];
+                                  updated[index].unitPrice = val;
+                                  setEditForm({ ...editForm, items: updated });
+                                }}
+                                className="w-full text-xs py-1.5"
+                                unit="تومان"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] text-slate-400 mb-0.5">تخفیف سطر</label>
+                              <MoneyInput
+                                value={item.discountAmount}
+                                onChange={(val) => {
+                                  const updated = [...editForm.items];
+                                  updated[index].discountAmount = val;
+                                  setEditForm({ ...editForm, items: updated });
+                                }}
+                                className="w-full text-xs py-1.5"
+                                unit="تومان"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-1 text-left">
+                              <span className="text-[10px] text-slate-400 block">جمع سطر:</span>
+                              <span className="font-mono font-bold text-white text-[11px]">{formatMoney(lineTotal)}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

@@ -446,15 +446,18 @@ export const invoices = pgTable("invoices", {
 export const invoiceItems = pgTable("invoice_items", {
   id: uuid("id").defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
-  productId: uuid("product_id").notNull().references(() => products.id),
+  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
   productNameSnapshot: text("product_name_snapshot").notNull(),
+  isCustom: boolean("is_custom").default(false),
+  customUnit: text("custom_unit").default("عدد"),
+  customNotes: text("custom_notes"),
   quantity: numeric("quantity", { precision: 15, scale: 4 }).notNull(),
   unitPrice: numeric("unit_price", { precision: 15, scale: 2 }).notNull(),
-  unitCostSnapshot: numeric("unit_cost_snapshot", { precision: 15, scale: 2 }).notNull(),
+  unitCostSnapshot: numeric("unit_cost_snapshot", { precision: 15, scale: 2 }).default("0").notNull(),
   discountAmount: numeric("discount_amount", { precision: 15, scale: 2 }).default("0"),
   lineTotal: numeric("line_total", { precision: 15, scale: 2 }).notNull(),
-  lineCogs: numeric("line_cogs", { precision: 15, scale: 2 }).notNull(),
-  lineProfit: numeric("line_profit", { precision: 15, scale: 2 }).notNull(),
+  lineCogs: numeric("line_cogs", { precision: 15, scale: 2 }).default("0").notNull(),
+  lineProfit: numeric("line_profit", { precision: 15, scale: 2 }).default("0").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

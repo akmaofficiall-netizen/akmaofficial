@@ -21,9 +21,16 @@ import { recalculateCustomerHealth } from "./customerHealth";
 import { logAuditEvent } from "./audit";
 
 export interface CreateInvoiceItemInput {
-  productId: string;
+  productId?: string | null;
+  productName?: string;
+  productNameSnapshot?: string;
+  isCustom?: boolean;
+  unit?: string;
+  customUnit?: string;
+  customNotes?: string;
   quantity: number;
   unitPrice?: number; // Optional override
+  unitCost?: number;
   discountAmount?: number;
 }
 
@@ -87,37 +94,83 @@ export async function createInvoice(input: CreateInvoiceInput) {
     // Process and validate items
     const processedItems = [];
     for (const itemInput of input.items) {
-      const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId)).limit(1);
-      if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
-
-      const resolvedPrice = await resolveProductPrice(product.id, input.projectId);
-      const unitPrice = itemInput.unitPrice !== undefined ? itemInput.unitPrice : resolvedPrice.effectivePrice;
-      if (!unitPrice || unitPrice <= 0) {
-        throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است (باید بزرگتر از صفر باشد).`);
+      const isCustomItem = Boolean(itemInput.isCustom || !itemInput.productId);
+      const qty = Number(itemInput.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        throw new Error("مقدار هر قلم باید عددی معتبر و بزرگتر از صفر باشد.");
       }
-      const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
-      const qty = itemInput.quantity;
-      const disc = itemInput.discountAmount || 0;
+      const disc = Number(itemInput.discountAmount || 0);
 
-      const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
-      const lineCogs = Math.round(qty * unitCost * 100) / 100;
-      const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+      if (isCustomItem) {
+        // Custom / Manual product item
+        const customName = (itemInput.productName || itemInput.productNameSnapshot || "کالای سفارشی / متفرقه").trim();
+        const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : 0;
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new Error(`قیمت واحد کالای سفارشی «${customName}» نامعتبر است.`);
+        }
+        if (disc > qty * unitPrice) {
+          throw new Error(`تخفیف کالای «${customName}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+        }
+        const unitCost = Number(itemInput.unitCost || 0);
+        const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+        const lineCogs = Math.round(qty * unitCost * 100) / 100;
+        const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
 
-      subtotal += qty * unitPrice;
-      lineDiscountsTotal += disc;
-      cogsTotal += lineCogs;
+        subtotal += qty * unitPrice;
+        lineDiscountsTotal += disc;
+        cogsTotal += lineCogs;
 
-      processedItems.push({
-        productId: product.id,
-        productNameSnapshot: product.name,
-        quantity: qty,
-        unitPrice,
-        unitCostSnapshot: unitCost,
-        discountAmount: disc,
-        lineTotal,
-        lineCogs,
-        lineProfit,
-      });
+        processedItems.push({
+          productId: null,
+          productNameSnapshot: customName,
+          isCustom: true,
+          customUnit: itemInput.customUnit || itemInput.unit || "عدد",
+          customNotes: itemInput.customNotes || null,
+          quantity: qty,
+          unitPrice,
+          unitCostSnapshot: unitCost,
+          discountAmount: disc,
+          lineTotal,
+          lineCogs,
+          lineProfit,
+        });
+      } else {
+        // Standard catalog product
+        const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId!)).limit(1);
+        if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
+
+        const resolvedPrice = await resolveProductPrice(product.id, input.projectId);
+        const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : resolvedPrice.effectivePrice;
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است.`);
+        }
+        if (disc > qty * unitPrice) {
+          throw new Error(`تخفیف محصول «${product.name}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+        }
+        const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
+        const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+        const lineCogs = Math.round(qty * unitCost * 100) / 100;
+        const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+
+        subtotal += qty * unitPrice;
+        lineDiscountsTotal += disc;
+        cogsTotal += lineCogs;
+
+        processedItems.push({
+          productId: product.id,
+          productNameSnapshot: product.name,
+          isCustom: false,
+          customUnit: product.unit || "عدد",
+          customNotes: null,
+          quantity: qty,
+          unitPrice,
+          unitCostSnapshot: unitCost,
+          discountAmount: disc,
+          lineTotal,
+          lineCogs,
+          lineProfit,
+        });
+      }
     }
 
     const invoiceDiscount = input.invoiceDiscount || 0;
@@ -169,6 +222,9 @@ export async function createInvoice(input: CreateInvoiceInput) {
         invoiceId: createdInvoice.id,
         productId: item.productId,
         productNameSnapshot: item.productNameSnapshot,
+        isCustom: item.isCustom,
+        customUnit: item.customUnit,
+        customNotes: item.customNotes,
         quantity: item.quantity.toString(),
         unitPrice: item.unitPrice.toString(),
         unitCostSnapshot: item.unitCostSnapshot.toString(),
@@ -178,21 +234,23 @@ export async function createInvoice(input: CreateInvoiceInput) {
         lineProfit: item.lineProfit.toString(),
       });
 
-      // Record inventory transaction (Sales OUT)
-      await recordInventoryTransaction(
-        {
-          itemType: "product",
-          itemId: item.productId,
-          transactionType: "sale",
-          quantityChange: -item.quantity, // Negative for sale
-          unitCostSnapshot: item.unitCostSnapshot,
-          referenceType: "invoice",
-          referenceId: createdInvoice.id,
-          projectId: input.projectId || null,
-          notes: `فروش فاکتور #${invoiceNum}`,
-        },
-        tx
-      );
+      // Record inventory transaction (Sales OUT) only for standard catalog products
+      if (item.productId && !item.isCustom) {
+        await recordInventoryTransaction(
+          {
+            itemType: "product",
+            itemId: item.productId,
+            transactionType: "sale",
+            quantityChange: -item.quantity, // Negative for sale
+            unitCostSnapshot: item.unitCostSnapshot,
+            referenceType: "invoice",
+            referenceId: createdInvoice.id,
+            projectId: input.projectId || null,
+            notes: `فروش فاکتور #${invoiceNum}`,
+          },
+          tx
+        );
+      }
     }
 
     // Commission Engine: project + product + employee override -> employee default -> product default.
@@ -315,22 +373,24 @@ export async function reverseInvoice(invoiceId: string, reason: string) {
 
     const items = await tx.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
 
-    // 1. Return stock for each item via inventory ledger
+    // 1. Return stock for each item via inventory ledger (only standard catalog products)
     for (const item of items) {
-      await recordInventoryTransaction(
-        {
-          itemType: "product",
-          itemId: item.productId,
-          transactionType: "sales_return",
-          quantityChange: Number(item.quantity),
-          unitCostSnapshot: Number(item.unitCostSnapshot),
-          referenceType: "invoice_reversal",
-          referenceId: invoiceId,
-          projectId: inv.projectId,
-          notes: `ابطال فاکتور #${inv.invoiceNumber}: ${reason}`,
-        },
-        tx
-      );
+      if (item.productId && !item.isCustom) {
+        await recordInventoryTransaction(
+          {
+            itemType: "product",
+            itemId: item.productId,
+            transactionType: "sales_return",
+            quantityChange: Number(item.quantity),
+            unitCostSnapshot: Number(item.unitCostSnapshot),
+            referenceType: "invoice_reversal",
+            referenceId: invoiceId,
+            projectId: inv.projectId,
+            notes: `ابطال فاکتور #${inv.invoiceNumber}: ${reason}`,
+          },
+          tx
+        );
+      }
     }
 
     // 2. Reverse associated payments
@@ -519,23 +579,25 @@ export async function updateInvoice(
 
     // If items are updated, recalculate line items and totals
     if (input.items && Array.isArray(input.items) && input.items.length > 0) {
-      // 1. Revert previous inventory items
+      // 1. Revert previous inventory items (only for catalog products)
       const oldItems = await tx.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
       for (const oldItem of oldItems) {
-        await recordInventoryTransaction(
-          {
-            itemType: "product",
-            itemId: oldItem.productId,
-            transactionType: "sales_return",
-            quantityChange: Number(oldItem.quantity),
-            unitCostSnapshot: Number(oldItem.unitCostSnapshot),
-            referenceType: "invoice_update",
-            referenceId: invoiceId,
-            projectId: patch.projectId ?? existing.projectId,
-            notes: `اصلاح اقلام فاکتور #${existing.invoiceNumber}`,
-          },
-          tx
-        );
+        if (oldItem.productId && !oldItem.isCustom) {
+          await recordInventoryTransaction(
+            {
+              itemType: "product",
+              itemId: oldItem.productId,
+              transactionType: "sales_return",
+              quantityChange: Number(oldItem.quantity),
+              unitCostSnapshot: Number(oldItem.unitCostSnapshot),
+              referenceType: "invoice_update",
+              referenceId: invoiceId,
+              projectId: patch.projectId ?? existing.projectId,
+              notes: `اصلاح اقلام فاکتور #${existing.invoiceNumber}`,
+            },
+            tx
+          );
+        }
       }
 
       // 2. Delete old invoice items
@@ -550,34 +612,81 @@ export async function updateInvoice(
       const effectiveProjectId = patch.projectId !== undefined ? patch.projectId : existing.projectId;
 
       for (const itemInput of input.items) {
-        const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId)).limit(1);
-        if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
+        const isCustomItem = Boolean(itemInput.isCustom || !itemInput.productId);
+        const qty = Number(itemInput.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) {
+          throw new Error("مقدار هر قلم باید عددی معتبر و بزرگتر از صفر باشد.");
+        }
+        const disc = Number(itemInput.discountAmount || 0);
 
-        const resolvedPrice = await resolveProductPrice(product.id, effectiveProjectId);
-        const unitPrice = itemInput.unitPrice !== undefined ? itemInput.unitPrice : resolvedPrice.effectivePrice;
-        const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
-        const qty = itemInput.quantity;
-        const disc = itemInput.discountAmount || 0;
+        if (isCustomItem) {
+          const customName = (itemInput.productName || itemInput.productNameSnapshot || "کالای سفارشی / متفرقه").trim();
+          const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : 0;
+          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new Error(`قیمت واحد کالای سفارشی «${customName}» نامعتبر است.`);
+          }
+          if (disc > qty * unitPrice) {
+            throw new Error(`تخفیف کالای «${customName}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+          }
+          const unitCost = Number(itemInput.unitCost || 0);
+          const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+          const lineCogs = Math.round(qty * unitCost * 100) / 100;
+          const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
 
-        const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
-        const lineCogs = Math.round(qty * unitCost * 100) / 100;
-        const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+          subtotal += qty * unitPrice;
+          lineDiscountsTotal += disc;
+          cogsTotal += lineCogs;
 
-        subtotal += qty * unitPrice;
-        lineDiscountsTotal += disc;
-        cogsTotal += lineCogs;
+          processedItems.push({
+            productId: null,
+            productNameSnapshot: customName,
+            isCustom: true,
+            customUnit: itemInput.customUnit || itemInput.unit || "عدد",
+            customNotes: itemInput.customNotes || null,
+            quantity: qty,
+            unitPrice,
+            unitCostSnapshot: unitCost,
+            discountAmount: disc,
+            lineTotal,
+            lineCogs,
+            lineProfit,
+          });
+        } else {
+          const [product] = await tx.select().from(products).where(eq(products.id, itemInput.productId!)).limit(1);
+          if (!product) throw new Error(`محصول با شناسه ${itemInput.productId} یافت نشد.`);
 
-        processedItems.push({
-          productId: product.id,
-          productNameSnapshot: product.name,
-          quantity: qty,
-          unitPrice,
-          unitCostSnapshot: unitCost,
-          discountAmount: disc,
-          lineTotal,
-          lineCogs,
-          lineProfit,
-        });
+          const resolvedPrice = await resolveProductPrice(product.id, effectiveProjectId);
+          const unitPrice = itemInput.unitPrice !== undefined ? Number(itemInput.unitPrice) : resolvedPrice.effectivePrice;
+          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new Error(`قیمت واحد محصول «${product.name}» نامعتبر است.`);
+          }
+          if (disc > qty * unitPrice) {
+            throw new Error(`تخفیف محصول «${product.name}» نمی‌تواند بیشتر از مبلغ کل آن باشد.`);
+          }
+          const unitCost = Number(product.calculatedCost) || Number(product.basePrice) || 0;
+          const lineTotal = Math.round((qty * unitPrice - disc) * 100) / 100;
+          const lineCogs = Math.round(qty * unitCost * 100) / 100;
+          const lineProfit = Math.round((lineTotal - lineCogs) * 100) / 100;
+
+          subtotal += qty * unitPrice;
+          lineDiscountsTotal += disc;
+          cogsTotal += lineCogs;
+
+          processedItems.push({
+            productId: product.id,
+            productNameSnapshot: product.name,
+            isCustom: false,
+            customUnit: product.unit || "عدد",
+            customNotes: null,
+            quantity: qty,
+            unitPrice,
+            unitCostSnapshot: unitCost,
+            discountAmount: disc,
+            lineTotal,
+            lineCogs,
+            lineProfit,
+          });
+        }
       }
 
       const invoiceDiscount =
@@ -610,6 +719,9 @@ export async function updateInvoice(
           invoiceId,
           productId: item.productId,
           productNameSnapshot: item.productNameSnapshot,
+          isCustom: item.isCustom,
+          customUnit: item.customUnit,
+          customNotes: item.customNotes,
           quantity: item.quantity.toString(),
           unitPrice: item.unitPrice.toString(),
           unitCostSnapshot: item.unitCostSnapshot.toString(),
@@ -619,20 +731,22 @@ export async function updateInvoice(
           lineProfit: item.lineProfit.toString(),
         });
 
-        await recordInventoryTransaction(
-          {
-            itemType: "product",
-            itemId: item.productId,
-            transactionType: "sale",
-            quantityChange: -item.quantity,
-            unitCostSnapshot: item.unitCostSnapshot,
-            referenceType: "invoice_update",
-            referenceId: invoiceId,
-            projectId: effectiveProjectId,
-            notes: `فروش اصلاح شده فاکتور #${patch.invoiceNumber || existing.invoiceNumber}`,
-          },
-          tx
-        );
+        if (item.productId && !item.isCustom) {
+          await recordInventoryTransaction(
+            {
+              itemType: "product",
+              itemId: item.productId,
+              transactionType: "sale",
+              quantityChange: -item.quantity,
+              unitCostSnapshot: item.unitCostSnapshot,
+              referenceType: "invoice_update",
+              referenceId: invoiceId,
+              projectId: effectiveProjectId,
+              notes: `فروش اصلاح شده فاکتور #${patch.invoiceNumber || existing.invoiceNumber}`,
+            },
+            tx
+          );
+        }
       }
     } else if (input.invoiceDiscount !== undefined) {
       const subtotal = Number(existing.subtotal) || 0;
@@ -681,20 +795,22 @@ export async function deleteInvoice(invoiceId: string, reason?: string) {
     if (existing.status !== "cancelled" && existing.status !== "reversed") {
       const items = await tx.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
       for (const item of items) {
-        await recordInventoryTransaction(
-          {
-            itemType: "product",
-            itemId: item.productId,
-            transactionType: "adjustment",
-            quantityChange: Number(item.quantity), // Positive to restore stock
-            unitCostSnapshot: Number(item.unitCostSnapshot),
-            referenceType: "invoice_void",
-            referenceId: invoiceId,
-            projectId: existing.projectId || null,
-            notes: `بازگشت موجودی کالا بابت حذف فاکتور #${existing.invoiceNumber}`,
-          },
-          tx
-        );
+        if (item.productId && !item.isCustom) {
+          await recordInventoryTransaction(
+            {
+              itemType: "product",
+              itemId: item.productId,
+              transactionType: "adjustment",
+              quantityChange: Number(item.quantity), // Positive to restore stock
+              unitCostSnapshot: Number(item.unitCostSnapshot),
+              referenceType: "invoice_void",
+              referenceId: invoiceId,
+              projectId: existing.projectId || null,
+              notes: `بازگشت موجودی کالا بابت حذف فاکتور #${existing.invoiceNumber}`,
+            },
+            tx
+          );
+        }
       }
 
       // Reverse any completed payments linked to this invoice

@@ -74,6 +74,13 @@ export async function POST(req: Request) {
     }
     // Validation: NaN, Infinity, negative
     for (const item of body.items) {
+      const isCustom = Boolean(item.isCustom || !item.productId);
+      if (isCustom && !item.productName && !item.productNameSnapshot) {
+        return NextResponse.json({ success: false, error: "برای کالای سفارشی / متفرقه، وارد کردن نام کالا الزامی است." }, { status: 400 });
+      }
+      if (!isCustom && !item.productId) {
+        return NextResponse.json({ success: false, error: "شناسه محصول انتخاب شده نامعتبر است." }, { status: 400 });
+      }
       const qty = Number(item.quantity);
       const price = item.unitPrice !== undefined ? Number(item.unitPrice) : NaN;
       const disc = Number(item.discountAmount || 0);
@@ -124,6 +131,8 @@ export async function POST(req: Request) {
       salesMode: body.salesMode || "direct",
       employeeId: finalEmployeeId,
       intermediaryEmployeeId: body.intermediaryEmployeeId || null,
+      invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : undefined,
+      dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
       invoiceDiscount: body.invoiceDiscount ? Number(body.invoiceDiscount) : 0,
       taxTotal: body.taxTotal ? Number(body.taxTotal) : 0,
       items: body.items,

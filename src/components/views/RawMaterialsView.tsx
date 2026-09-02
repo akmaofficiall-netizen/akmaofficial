@@ -583,6 +583,7 @@ export const RawMaterialsView: React.FC = () => {
                   <input
                     id="input-add-rm-stock"
                     type="number"
+                    step="any"
                     min="0"
                     value={formData.stockQuantity}
                     onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })}
@@ -594,6 +595,7 @@ export const RawMaterialsView: React.FC = () => {
                   <input
                     id="input-add-rm-min-stock"
                     type="number"
+                    step="any"
                     min="0"
                     value={formData.minStockQuantity}
                     onChange={(e) => setFormData({ ...formData, minStockQuantity: Number(e.target.value) })}
@@ -744,6 +746,7 @@ export const RawMaterialsView: React.FC = () => {
                   <label className="block text-slate-400 mb-1">حداقل نقطه سفارش</label>
                   <input
                     type="number"
+                    step="any"
                     min="0"
                     value={formData.minStockQuantity}
                     onChange={(e) => setFormData({ ...formData, minStockQuantity: Number(e.target.value) })}
@@ -886,6 +889,7 @@ export const RawMaterialsView: React.FC = () => {
                 <label className="block text-slate-400 mb-1">موجودی جدید شمارش شده انبار *</label>
                 <input
                   type="number"
+                  step="any"
                   min="0"
                   required
                   value={adjustQty}

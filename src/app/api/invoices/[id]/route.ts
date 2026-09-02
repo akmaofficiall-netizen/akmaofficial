@@ -44,7 +44,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         productUnit: products.unit,
       })
       .from(invoiceItems)
-      .innerJoin(products, eq(invoiceItems.productId, products.id))
+      .leftJoin(products, eq(invoiceItems.productId, products.id))
       .where(eq(invoiceItems.invoiceId, id));
 
     const invoicePayments = await db
@@ -69,8 +69,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       },
       items: items.map(({ item, productCode, productUnit }) => ({
         ...item,
-        productCode,
-        productUnit,
+        productCode: productCode || (item.isCustom ? "سفارشی" : "-"),
+        productUnit: item.customUnit || productUnit || "عدد",
         quantity: Number(item.quantity),
         unitPrice: Number(item.unitPrice),
         discountAmount: Number(item.discountAmount),
